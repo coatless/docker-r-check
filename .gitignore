@@ -1,0 +1,9 @@
+## R builds and check output, one directory per flavor
+/build/
+
+## Fetched from CRAN by tools/fetch-cran-issues.R
+cran-issues.csv
+
+## Written next to a check when it is summarised
+rcheck-results.json
+rcheck-results.tsv

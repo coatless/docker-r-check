@@ -1,0 +1,54 @@
+name: ci
+
+# Fast checks that need no container runtime, no R and no network. These run on
+# every push, and they are what catches a broken flavor definition or a broken
+# result parser in seconds rather than after a forty-minute image build.
+#
+# The slow, real validation -- do the images build, and does a sanitizer flavor
+# actually detect anything -- lives in images.yml.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+
+      - name: Run the test suite
+        run: ./tests/run-tests.sh
+
+  # The suite asserts that every base image is pinned, but not that the pin is
+  # still the digest the tag points at today. That is deliberately NOT enforced
+  # -- a moving tag is exactly what pinning defends against, and a job that
+  # auto-updated the pin would undo it. This job only reports drift, so that a
+  # maintainer can decide when to move.
+  pin-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report base image drift
+        run: |
+          cp pins/base-images.tsv /tmp/pins-before.tsv
+          ./tools/pin-images.sh
+          if diff -u /tmp/pins-before.tsv pins/base-images.tsv > /tmp/pin.diff; then
+            echo "Base image pins are current."
+          else
+            echo "::notice::Base image tags have moved since the pins were taken."
+            echo "Review and commit deliberately with: tools/pin-images.sh"
+            cat /tmp/pin.diff
+          fi
+          git checkout -- pins/base-images.tsv

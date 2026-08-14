@@ -1,0 +1,5 @@
+> library(ubpkg)
+> fastsum(1:10)
+ubpkg/src/sum.c:42:19: runtime error: signed integer overflow: 2147483647 + 1 cannot be represented in type 'int'
+    #0 0x7f2a in fastsum ubpkg/src/sum.c:42
+[1] 55

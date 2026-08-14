@@ -1,0 +1,7 @@
+## Base image digests, resolved by tools/pin-images.sh.
+## Canonical machine-readable form: ref<TAB>digest<TAB>resolved_at
+##
+## Refreshing this file changes what every flavor builds from, so it is
+## a deliberate, reviewable commit -- never something CI does silently.
+ref	digest	resolved_at
+docker.io/debian:unstable	sha256:880657f06f0aed1cdd6593688faafb1372f70b011913d7fb77231a781c9ab20f	2026-08-14T23:18:35Z

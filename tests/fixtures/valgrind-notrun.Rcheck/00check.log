@@ -1,0 +1,16 @@
+* using log directory ‘/home/rbuild/tmp/CRAN/cleanpkg.Rcheck’
+* using R Under development (unstable) (2026-08-01 r90210)
+* using platform: x86_64-pc-linux-gnu
+* using session charset: UTF-8
+* checking for file ‘cleanpkg/DESCRIPTION’ ... OK
+* this is package ‘cleanpkg’ version ‘0.4-1’
+* checking package namespace information ... OK
+* checking whether package ‘cleanpkg’ can be installed ... OK
+* checking Rd files ... OK
+* checking examples ... OK
+* checking tests ...
+  Running ‘testthat.R’
+ OK
+* checking PDF version of manual ... OK
+* DONE
+Status: OK

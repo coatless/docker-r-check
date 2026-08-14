@@ -1,0 +1,19 @@
+* using log directory ‘/home/rbuild/tmp/CRAN/brokenpkg.Rcheck’
+* using R Under development (unstable) (2026-08-01 r90210)
+* checking for file ‘brokenpkg/DESCRIPTION’ ... OK
+* this is package ‘brokenpkg’ version ‘1.2.3’
+* checking whether package ‘brokenpkg’ can be installed ... OK
+* checking installed package size ... NOTE
+  installed size is  7.1Mb
+* checking dependencies in R code ... OK
+* checking Rd cross-references ... NOTE
+  Undeclared package ‘jsonlite’ in Rd xrefs
+* checking examples ... OK
+* checking tests ...
+  Running ‘spelling.R’
+  Running ‘testthat.R’
+ ERROR
+Running the tests in ‘tests/testthat.R’ failed.
+* checking PDF version of manual ... OK
+* DONE
+Status: 1 ERROR, 2 NOTEs

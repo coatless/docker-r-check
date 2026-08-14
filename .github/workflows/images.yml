@@ -1,0 +1,108 @@
+name: images
+
+# The expensive half of CI: actually build the images, actually build R, and
+# actually check a package.
+#
+# Not on push, on purpose. Each job builds R from SVN, which takes tens of
+# minutes, and the fast suite in ci.yml already catches everything that can be
+# caught cheaply. Run this on a schedule and on demand.
+#
+# The canary job is the one that matters. It checks tests/pkgs/rcheckcanary --
+# a package containing deliberate undefined behaviour -- and FAILS IF THE
+# FLAVOR REPORTS IT CLEAN. Without that assertion a sanitizer image that
+# silently lost its instrumentation would look like a perfectly healthy build
+# and would agree with CRAN on every package that has no issue.
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      flavors:
+        description: 'Space-separated flavors to build'
+        required: false
+        default: 'debian-gcc nold gcc-ubsan'
+
+permissions:
+  contents: read
+
+jobs:
+  build-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [debian-gcc, nold, nosuggests, donttest, gcc-ubsan, gcc-asan, clang-ubsan, clang-asan, valgrind]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show what this flavor claims to be
+        run: ./bin/rcheck describe ${{ matrix.flavor }}
+
+      - name: Build images
+        run: ./bin/rcheck build ${{ matrix.flavor }}
+
+  # End-to-end on one instrumented flavor and one control flavor: build R,
+  # check the canary, and assert the verdicts differ in the expected direction.
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: gcc-ubsan
+            expect: ISSUE
+          - flavor: debian-gcc
+            expect: OK
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: ./bin/rcheck build ${{ matrix.flavor }}
+
+      - name: Build R
+        run: ./bin/rcheck --jobs 4 build-r ${{ matrix.flavor }}
+
+      - name: Package the canary
+        run: |
+          mkdir -p build/${{ matrix.flavor }}/pkg
+          tar czf build/${{ matrix.flavor }}/pkg/rcheckcanary_0.1.0.tar.gz \
+              -C tests/pkgs rcheckcanary
+
+      - name: Check the canary
+        # The check itself is allowed to fail: under an instrumented flavor a
+        # non-zero exit is the expected outcome. The verdict below is what is
+        # actually asserted.
+        continue-on-error: true
+        run: ./bin/rcheck --jobs 4 check ${{ matrix.flavor }}
+
+      - name: Summarise
+        run: ./bin/rcheck summarise ${{ matrix.flavor }}
+
+      - name: Assert the flavor behaved as claimed
+        run: |
+          tsv=build/${{ matrix.flavor }}/CRAN/rcheck-results.tsv
+          test -f "$tsv" || { echo "no results at $tsv"; exit 1; }
+          cat "$tsv"
+          got=$(awk -F'\t' 'NR>1 && $1=="rcheckcanary" { print $5; exit }' "$tsv")
+          echo "verdict: ${got:-<none>}   expected: ${{ matrix.expect }}"
+          if [ "$got" != "${{ matrix.expect }}" ]; then
+            echo "::error::flavor ${{ matrix.flavor }} returned '$got' on the canary package, expected '${{ matrix.expect }}'."
+            echo "For an instrumented flavor this means the instrumentation is NOT active:"
+            echo "the image builds and the check runs, but nothing is being detected."
+            exit 1
+          fi
+
+      - name: Upload check output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-${{ matrix.flavor }}
+          path: |
+            build/${{ matrix.flavor }}/CRAN/**/00check.log
+            build/${{ matrix.flavor }}/CRAN/**/rcheck-result.json
+            build/${{ matrix.flavor }}/CRAN/rcheck-results.*
+            build/${{ matrix.flavor }}/rcheck-build.json
+          if-no-files-found: warn

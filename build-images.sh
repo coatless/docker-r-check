@@ -18,17 +18,24 @@ fi
 
 DEBIAN_MIRROR=${DEBIAN_MIRROR-http://deb.debian.org}
 
+## The original entry point, kept working. It predates flavors and takes a
+## sysdeps string rather than a flavor name; `bin/rcheck build <flavor>` is the
+## same thing driven from a checked-in definition, with digest pinning.
+##
+## Build context is now the repository root (the image carries flavors/ and
+## tools/), so this builds with -f rather than by cd'ing into docker/.
+
 set -e
-cd docker
-docker build \
-  --build-arg DEBIAN_TAG=${DEBIAN_TAG} \
+cd "$(dirname "$0")"
+docker build -f docker/Dockerfile \
+  --build-arg BASE_TAG=${DEBIAN_TAG} \
   --build-arg DEBIAN_MIRROR=${DEBIAN_MIRROR} \
   --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
   --build-arg R_BUILD_SYSDEPS=${R_BUILD_SYSDEPS} \
   --target build-r -t rchk-build-r:${DEBIAN_TAG}-${FLAVOR_TAG} .
 
-docker build \
-  --build-arg DEBIAN_TAG=${DEBIAN_TAG} \
+docker build -f docker/Dockerfile \
+  --build-arg BASE_TAG=${DEBIAN_TAG} \
   --build-arg DEBIAN_MIRROR=${DEBIAN_MIRROR} \
   --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
   --build-arg R_BUILD_SYSDEPS=${R_BUILD_SYSDEPS} \

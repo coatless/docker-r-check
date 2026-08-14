@@ -1,0 +1,5 @@
+* using log directory ‘/home/rbuild/tmp/CRAN/deadpkg.Rcheck’
+* checking for file ‘deadpkg/DESCRIPTION’ ... OK
+* this is package ‘deadpkg’ version ‘3.1’
+* checking package namespace information ... OK
+* checking whether package ‘deadpkg’ can be installed ...

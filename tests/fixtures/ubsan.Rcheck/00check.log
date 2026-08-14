@@ -1,0 +1,10 @@
+* using log directory ‘/home/rbuild/tmp/CRAN/ubpkg.Rcheck’
+* checking for file ‘ubpkg/DESCRIPTION’ ... OK
+* this is package ‘ubpkg’ version ‘2.0’
+* checking whether package ‘ubpkg’ can be installed ... OK
+* checking examples ... OK
+* checking tests ...
+  Running ‘basic.R’
+ OK
+* DONE
+Status: OK

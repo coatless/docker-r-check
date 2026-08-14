@@ -1,0 +1,14 @@
+Package: rcheckcanary
+Type: Package
+Title: Deliberately Undefined Behaviour for Verifying Check Flavors
+Version: 0.1.0
+Authors@R: person("docker-r-check", "contributors", role = c("aut", "cre"),
+                  email = "nobody@example.org")
+Description: A test fixture, not a real package. It contains C code with
+    deliberate undefined behaviour so that a sanitizer or valgrind flavor can
+    be verified to actually detect something. A flavor that reports this
+    package as clean is not instrumented, however convincing its output looks.
+    Never submit this anywhere.
+License: GPL-2
+NeedsCompilation: yes
+Encoding: UTF-8

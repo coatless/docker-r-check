@@ -1,0 +1,5 @@
+==31415== Memcheck, a memory error detector
+==31415== Invalid read of size 8
+==31415==    at 0x4C2E: vg_bad_read (vgpkg/src/bad.c:17)
+==31415== 
+==31415== ERROR SUMMARY: 3 errors from 2 contexts (suppressed: 0 from 0)

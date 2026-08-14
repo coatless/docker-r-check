@@ -1,0 +1,9 @@
+* using log directory ‘/home/rbuild/tmp/CRAN/vgpkg.Rcheck’
+* checking for file ‘vgpkg/DESCRIPTION’ ... OK
+* this is package ‘vgpkg’ version ‘0.1’
+* checking whether package ‘vgpkg’ can be installed ... OK
+* checking tests ...
+  Running ‘t.R’
+ OK
+* DONE
+Status: OK

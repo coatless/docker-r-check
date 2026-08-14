@@ -1,0 +1,475 @@
+#!/bin/bash
+#
+# rcheck -- run one of CRAN's additional checks on a package, in a container.
+#
+#   rcheck run nold mypkg_1.0.tar.gz
+#
+# is meant to be the whole story: it builds the image, builds R the way that
+# flavor needs it, checks the package, and writes a machine-readable verdict.
+#
+# Everything it does is also available as a separate step (build / build-r /
+# check / summarise / compare), because on a real machine the R build takes
+# long enough that you want to do it once and check many packages against it.
+#
+# See docs/ for the design; `rcheck help` for the command list.
+
+set -u
+
+PROG=${0##*/}
+here=$(cd "$(dirname "$0")" && pwd)
+REPO=${RCHECK_REPO:-$(cd "$here/.." && pwd)}
+
+# shellcheck source=../docker/lib/flavor.sh
+. "$REPO/docker/lib/flavor.sh"
+
+## On the host, flavors come from the working copy.
+export RCHECK_FLAVOR_PATH="${RCHECK_FLAVOR_PATH:-$REPO/flavors}"
+
+## ---------------------------------------------------------------------------
+## Global options
+## ---------------------------------------------------------------------------
+
+RUNTIME=${RCHECK_RUNTIME:-docker}
+BUILD_ROOT=${RCHECK_BUILD_ROOT:-$PWD/build}
+PKG_DIR=""
+JOBS=${RCHECK_JOBS:-2}
+DRY_RUN=0
+PINS=${RCHECK_PINS:-$REPO/pins/base-images.tsv}
+DEBIAN_SNAPSHOT=${DEBIAN_SNAPSHOT:-}
+P3M_SNAPSHOT=${P3M_SNAPSHOT:-}
+R_SVN_REV=${R_SVN_REV:-}
+IMAGE_PREFIX=${RCHECK_IMAGE_PREFIX:-rchk}
+IMAGE_OVERRIDE=""
+NO_UPDATE=${NO_UPDATE:-}
+
+usage() {
+    cat <<EOF
+Usage: $PROG [options] <command> [arguments]
+
+Commands:
+  flavors                     list available flavors
+  describe <flavor> [--json]  print one flavor's full configuration
+  lint                        validate every flavor file against the schema
+  pin [--check|--show]        resolve/inspect base image digests
+
+  build <flavor>              build the container images for a flavor
+  build-r <flavor> [args...]  build R inside the flavor's container
+  check <flavor> [pkg...]     check package tarballs against that R
+  run <flavor> <pkg...>       build + build-r + check, in one go
+
+  summarise <flavor>          (re)derive results from an existing check run
+  compare <flavor> --issues F score results against CRAN's published issues
+
+Options:
+  --runtime docker|podman|apptainer   container runtime (default: $RUNTIME)
+  --image REF                 use this image instead of building one
+                              (required for --runtime apptainer)
+  --build-dir DIR             build root, one subdirectory per flavor
+                              (default: $BUILD_ROOT)
+  --pkg-dir DIR               directory of .tar.gz packages to check
+  --jobs N                    parallel make jobs (default: $JOBS)
+  --snapshot STAMP            pin apt to snapshot.debian.org, e.g. 20260801T000000Z
+  --p3m DATE                  pin R packages to a P3M snapshot, e.g. 2026-08-01
+  --r-svn-rev REV             pin the R sources to an SVN revision
+  --no-update                 do not svn up the R/QA sources before building
+  --pins FILE                 base image digest pins (default: $PINS)
+  --dry-run                   print the commands instead of running them
+  -h, --help                  this message
+
+Reproducibility: --snapshot, --p3m and --r-svn-rev are what make a result
+reproducible later. Without all three a rerun next month builds a different
+R from different sources against a different package graph. $PROG warns when
+they are unset rather than pretending the run is pinned.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        --runtime)    RUNTIME=$2; shift 2 ;;
+        --image)      IMAGE_OVERRIDE=$2; shift 2 ;;
+        --build-dir)  BUILD_ROOT=$2; shift 2 ;;
+        --pkg-dir)    PKG_DIR=$2; shift 2 ;;
+        --jobs)       JOBS=$2; shift 2 ;;
+        --snapshot)   DEBIAN_SNAPSHOT=$2; shift 2 ;;
+        --p3m)        P3M_SNAPSHOT=$2; shift 2 ;;
+        --r-svn-rev)  R_SVN_REV=$2; shift 2 ;;
+        --no-update)  NO_UPDATE=1; shift ;;
+        --pins)       PINS=$2; shift 2 ;;
+        --dry-run)    DRY_RUN=1; shift ;;
+        -h|--help)    usage; exit 0 ;;
+        --)           shift; break ;;
+        -*)           echo "$PROG: unknown option $1" >&2; usage >&2; exit 2 ;;
+        *)            break ;;
+    esac
+done
+
+[ $# -gt 0 ] || { usage >&2; exit 2; }
+COMMAND=$1; shift
+
+case $RUNTIME in
+    docker|podman|apptainer) ;;
+    *) rcheck_die "unknown runtime '$RUNTIME' (docker, podman or apptainer)" ;;
+esac
+
+## ---------------------------------------------------------------------------
+## Helpers
+## ---------------------------------------------------------------------------
+
+## Print a command the way a user could paste it back into a shell, then run
+## it -- or, under --dry-run, only print it. --dry-run is not a courtesy: it is
+## how the test suite exercises this script on a machine with no container
+## runtime, so the quoting below is load-bearing.
+run_cmd() {
+    local out="" a
+    for a in "$@"; do
+        case $a in
+            *[!A-Za-z0-9_/.:=@,+-]*) out="$out '${a//\'/\'\\\'\'}'" ;;
+            *)                       out="$out $a" ;;
+        esac
+    done
+    printf '+%s\n' "$out" >&2
+    [ "$DRY_RUN" -eq 1 ] && return 0
+    "$@"
+}
+
+pinned_digest() {
+    local ref=$1
+    [ -f "$PINS" ] || return 1
+    awk -F'\t' -v ref="$ref" '$1 == ref { print $2; found = 1; exit } END { exit !found }' "$PINS"
+}
+
+require_flavor_usable() {
+    if [ "$STATUS" = planned ]; then
+        rcheck_die "flavor '$FLAVOR_ID' is STATUS=planned and not usable yet.
+   $(printf '%s' "$NOTES" | head -n 3)
+   Full explanation in $RCHECK_FLAVOR_FILE"
+    fi
+    if [ "$STATUS" = experimental ]; then
+        echo "== NOTE: flavor '$FLAVOR_ID' is experimental. Its configuration has not" >&2
+        echo "   been validated against CRAN's own results, so a verdict from it is" >&2
+        echo "   evidence, not proof. See NOTES in $RCHECK_FLAVOR_FILE" >&2
+    fi
+}
+
+warn_unpinned() {
+    local missing=""
+    [ -n "$DEBIAN_SNAPSHOT" ] || missing="$missing --snapshot"
+    [ -n "$P3M_SNAPSHOT" ]    || missing="$missing --p3m"
+    [ -n "$R_SVN_REV" ]       || missing="$missing --r-svn-rev"
+    [ -n "$missing" ] || return 0
+    echo "== NOTE: this run is not fully pinned (missing:$missing)." >&2
+    echo "   It will produce a valid verdict, but not one that can be reproduced" >&2
+    echo "   later or on another host. Fine for triaging a package now; not fine" >&2
+    echo "   for anything published. See docs/reproducibility.md" >&2
+}
+
+build_image_name() { printf '%s-build-r:%s' "$IMAGE_PREFIX" "$1"; }
+check_image_name() { printf '%s-pkgcheck:%s' "$IMAGE_PREFIX" "$1"; }
+
+flavor_build_dir() { printf '%s/%s' "$BUILD_ROOT" "$1"; }
+
+## ---------------------------------------------------------------------------
+## Commands
+## ---------------------------------------------------------------------------
+
+cmd_flavors() {
+    local id
+    printf '%-14s %-5s %-14s %-12s %s\n' FLAVOR TIER STATUS "CRAN KIND" TITLE
+    for id in $(rcheck_flavor_list); do
+        ( rcheck_flavor_load "$id"
+          printf '%-14s %-5s %-14s %-12s %s\n' \
+              "$FLAVOR_ID" "$TIER" "$STATUS" "${CRAN_ISSUE_KIND:--}" "$FLAVOR_TITLE" )
+    done
+}
+
+cmd_describe() {
+    local id=${1:-} json=0
+    [ -n "$id" ] || rcheck_die "describe: which flavor?"
+    shift
+    [ "${1:-}" = --json ] && json=1
+    rcheck_flavor_load "$id"
+    if [ $json -eq 1 ]; then
+        rcheck_flavor_json
+        return
+    fi
+    cat <<EOF
+Flavor:            $FLAVOR_ID
+Title:             $FLAVOR_TITLE
+CRAN issue kind:   ${CRAN_ISSUE_KIND:-(none -- control flavor)}
+CRAN runs it on:   $CRAN_HOST_OS
+Tier / status:     $TIER / $STATUS
+Definition:        $RCHECK_FLAVOR_FILE
+Reference:         ${REFERENCE:-(none)}
+
+Base image:        $BASE_IMAGE:$BASE_TAG   (family $BASE_FAMILY)
+Base digest:       $(pinned_digest "$BASE_IMAGE:$BASE_TAG" || echo '(unpinned -- run rcheck pin)')
+Apt components:    $APT_COMPONENTS
+Extra sysdeps:     ${R_BUILD_SYSDEPS:-(none)}
+
+R build method:    $R_BUILD_METHOD
+configure args:    ${R_CONFIGURE_ARGS:-(none)}
+CC:                ${R_CC:-(distribution default)}
+CXX:               ${R_CXX:-(distribution default)}
+FC:                ${R_FC:-(distribution default)}
+CFLAGS:            ${R_CFLAGS:-(default)}
+CXXFLAGS:          ${R_CXXFLAGS:-(default)}
+
+check.Renviron:    ${CHECK_RENVIRON:-(none)}
+runtime env:       ${CHECK_RUNTIME_ENV:-(none)}
+extra check args:  ${CHECK_EXTRA_ARGS:-(none)}
+
+Notes:
+$(printf '%s' "$NOTES" | sed 's/^/  /')
+EOF
+}
+
+cmd_lint() {
+    local id rc=0 n=0
+    for id in $(rcheck_flavor_list); do
+        if ( rcheck_flavor_load "$id" ) 2>/tmp/rcheck-lint.$$; then
+            n=$((n + 1))
+        else
+            sed 's/^/  /' /tmp/rcheck-lint.$$ >&2
+            rc=1
+        fi
+        rm -f /tmp/rcheck-lint.$$
+    done
+    ## Catch keys that are not in the schema. A typo'd key would otherwise be
+    ## silently ignored, which is the worst failure mode a config format has:
+    ## the flavor looks configured and is not.
+    ##
+    ## Determined by sourcing the file in a clean shell and diffing the set of
+    ## defined variables, rather than by grepping for KEY= lines: the values of
+    ## CHECK_RENVIRON and CHECK_RUNTIME_ENV are themselves VAR=value lines, and
+    ## a text scan cannot tell those apart from real keys.
+    local f key
+    ## RCHECK_FLAVOR_KEYS is newline-separated; flatten it so the glob below
+    ## can match on space-delimited words.
+    local schema_keys
+    # shellcheck disable=SC2086  # deliberate word splitting to normalise whitespace
+    schema_keys=" $(echo $RCHECK_FLAVOR_KEYS) "
+
+    for f in "$RCHECK_FLAVOR_PATH"/*.conf; do
+        [ -f "$f" ] || continue
+        while read -r key; do
+            [ -n "$key" ] || continue
+            case $schema_keys in
+                *" $key "*) ;;
+                *) echo "$f: key '$key' is not in flavors/SCHEMA" >&2; rc=1 ;;
+            esac
+        done < <(env -i PATH="$PATH" bash --noprofile --norc -c '
+                     before=$(compgen -v | sort)
+                     . "$1" || exit 1
+                     after=$(compgen -v | sort)
+                     comm -13 <(printf "%s\n" "$before") <(printf "%s\n" "$after")
+                 ' _ "$f" | grep -vxE 'before|after|_|PIPESTATUS|FUNCNAME|BASH_[A-Z_]*')
+    done
+    [ $rc -eq 0 ] && echo "$n flavor(s) OK"
+    return $rc
+}
+
+cmd_pin() { "$REPO/tools/pin-images.sh" "$@"; }
+
+cmd_build() {
+    local id=${1:-}
+    [ -n "$id" ] || rcheck_die "build: which flavor?"
+    rcheck_flavor_load "$id"
+    require_flavor_usable
+
+    [ "$RUNTIME" = apptainer ] && rcheck_die "apptainer cannot build these images; build with docker or podman and pass --image to run"
+
+    local ref="$BASE_IMAGE:$BASE_TAG" digest suffix=""
+    if digest=$(pinned_digest "$ref"); then
+        suffix="@$digest"
+        echo "== base image pinned to $ref$suffix" >&2
+    else
+        echo "== WARNING: $ref is not pinned in $PINS; the build is not reproducible." >&2
+        echo "   Run '$PROG pin' and commit the result." >&2
+    fi
+
+    local common=(
+        --build-arg "BASE_IMAGE=$BASE_IMAGE"
+        --build-arg "BASE_TAG=$BASE_TAG"
+        --build-arg "BASE_DIGEST_SUFFIX=$suffix"
+        --build-arg "APT_COMPONENTS=$APT_COMPONENTS"
+        --build-arg "DEBIAN_SNAPSHOT=$DEBIAN_SNAPSHOT"
+        --build-arg "DEBIAN_MIRROR=${DEBIAN_MIRROR:-http://deb.debian.org}"
+        --build-arg "R_BUILD_SYSDEPS=$R_BUILD_SYSDEPS"
+        --build-arg "RCHECK_FLAVOR=$FLAVOR_ID"
+        --build-arg "UID=$(id -u)"
+        --build-arg "GID=$(id -g)"
+    )
+
+    run_cmd "$RUNTIME" build -f "$REPO/docker/Dockerfile" "${common[@]}" \
+        --target build-r -t "$(build_image_name "$id")" "$REPO" || return 1
+    run_cmd "$RUNTIME" build -f "$REPO/docker/Dockerfile" "${common[@]}" \
+        --target pkgcheck -t "$(check_image_name "$id")" "$REPO"
+}
+
+## Arguments shared by build-r and check runs, returned in the global
+## RCHECK_ENV_ARGS. A nameref parameter would read better, but namerefs need
+## bash 4.3 and macOS still ships bash 3.2 -- and macOS with Docker Desktop is
+## one of the hosts the cross-host agreement experiment has to run on.
+RCHECK_ENV_ARGS=()
+container_env_args() {
+    RCHECK_ENV_ARGS=(
+        -e "RCHECK_FLAVOR=$FLAVOR_ID"
+        -e "MAKEFLAGS=-j$JOBS"
+    )
+    [ -n "$R_SVN_REV" ]       && RCHECK_ENV_ARGS+=(-e "R_SVN_REV=$R_SVN_REV")
+    [ -n "$P3M_SNAPSHOT" ]    && RCHECK_ENV_ARGS+=(-e "P3M_SNAPSHOT=$P3M_SNAPSHOT")
+    [ -n "$NO_UPDATE" ]       && RCHECK_ENV_ARGS+=(-e "NO_UPDATE=$NO_UPDATE")
+    [ -n "${CRAN_MIRROR:-}" ] && RCHECK_ENV_ARGS+=(-e "CRAN_MIRROR=$CRAN_MIRROR")
+    return 0
+}
+
+cmd_build_r() {
+    local id=${1:-}
+    [ -n "$id" ] || rcheck_die "build-r: which flavor?"
+    shift
+    rcheck_flavor_load "$id"
+    require_flavor_usable
+    warn_unpinned
+
+    local bdir; bdir=$(flavor_build_dir "$id")
+    [ "$DRY_RUN" -eq 1 ] || mkdir -p "$bdir"
+
+    container_env_args
+
+    if [ "$RUNTIME" = apptainer ]; then
+        [ -n "$IMAGE_OVERRIDE" ] || rcheck_die "--runtime apptainer needs --image REF"
+        run_cmd apptainer exec --cleanenv \
+            --home "$bdir/home:/home/rbuild" \
+            --bind "$bdir:/build" \
+            --bind "$REPO/flavors:/rcheck/flavors.local:ro" \
+            --env "RCHECK_FLAVOR=$FLAVOR_ID,MAKEFLAGS=-j$JOBS" \
+            "$IMAGE_OVERRIDE" /bin/bash /entry-build-r.sh "$@"
+        return $?
+    fi
+
+    local image=${IMAGE_OVERRIDE:-$(build_image_name "$id")}
+    run_cmd "$RUNTIME" run --rm \
+        -v "$bdir:/build" \
+        -v "$REPO/flavors:/rcheck/flavors.local:ro" \
+        "${RCHECK_ENV_ARGS[@]}" \
+        "$image" "$@"
+}
+
+cmd_check() {
+    local id=${1:-}
+    [ -n "$id" ] || rcheck_die "check: which flavor?"
+    shift
+    rcheck_flavor_load "$id"
+    require_flavor_usable
+    warn_unpinned
+
+    local bdir; bdir=$(flavor_build_dir "$id")
+    local pkgdir=$PKG_DIR
+
+    ## Any tarballs named on the command line are staged into the flavor's own
+    ## package directory, so that two flavors checking different packages
+    ## cannot see each other's inputs.
+    local tarballs=() arg
+    for arg in "$@"; do
+        case $arg in
+            *.tar.gz) tarballs+=("$arg") ;;
+        esac
+    done
+
+    if [ ${#tarballs[@]} -gt 0 ]; then
+        pkgdir=$bdir/pkg
+        if [ "$DRY_RUN" -eq 0 ]; then
+            mkdir -p "$pkgdir"
+            for arg in "${tarballs[@]}"; do
+                [ -f "$arg" ] || rcheck_die "no such package tarball: $arg"
+                cp -p "$arg" "$pkgdir/"
+            done
+        fi
+        set --   ## the tarballs are inputs, not arguments to the check driver
+    fi
+
+    if [ -z "$pkgdir" ]; then
+        if [ -d "$bdir/pkg" ]; then
+            pkgdir=$bdir/pkg
+        else
+            rcheck_die "no packages to check: name a .tar.gz, or use --pkg-dir, or put tarballs in $bdir/pkg"
+        fi
+    fi
+
+    container_env_args
+
+    if [ "$RUNTIME" = apptainer ]; then
+        [ -n "$IMAGE_OVERRIDE" ] || rcheck_die "--runtime apptainer needs --image REF"
+        run_cmd apptainer exec --cleanenv \
+            --home "$bdir/home:/home/rbuild" \
+            --bind "$bdir:/build" \
+            --bind "$pkgdir:/pkg" \
+            --bind "$REPO/flavors:/rcheck/flavors.local:ro" \
+            --env "RCHECK_FLAVOR=$FLAVOR_ID,MAKEFLAGS=-j$JOBS${P3M_SNAPSHOT:+,P3M_SNAPSHOT=$P3M_SNAPSHOT}" \
+            "$IMAGE_OVERRIDE" /bin/bash /entry-pkgcheck.sh "$@"
+        return $?
+    fi
+
+    local image=${IMAGE_OVERRIDE:-$(check_image_name "$id")}
+    run_cmd "$RUNTIME" run --rm \
+        -v "$bdir:/build" \
+        -v "$pkgdir:/pkg" \
+        -v "$REPO/flavors:/rcheck/flavors.local:ro" \
+        "${RCHECK_ENV_ARGS[@]}" \
+        "$image" "$@"
+}
+
+cmd_run() {
+    local id=${1:-}
+    [ -n "$id" ] || rcheck_die "run: which flavor?"
+    cmd_build "$id" || return 1
+    cmd_build_r "$id" || return 1
+    cmd_check "$@"
+}
+
+cmd_summarise() {
+    local id=${1:-}
+    [ -n "$id" ] || rcheck_die "summarise: which flavor?"
+    rcheck_flavor_load "$id"
+    local bdir; bdir=$(flavor_build_dir "$id")
+    local checkdir=$bdir/CRAN
+    [ -d "$checkdir" ] || rcheck_die "no check results under $checkdir -- has '$PROG check $id' run?"
+
+    local dirs=("$checkdir"/*.Rcheck)
+    [ -e "${dirs[0]}" ] || rcheck_die "no .Rcheck directories under $checkdir"
+
+    "$REPO/tools/summarise-check.sh" \
+        --flavor "$FLAVOR_ID" \
+        --issue-kind "$CRAN_ISSUE_KIND" \
+        --outdir "$checkdir" \
+        "${dirs[@]}"
+}
+
+cmd_compare() {
+    local id=${1:-}
+    [ -n "$id" ] || rcheck_die "compare: which flavor?"
+    shift
+    rcheck_flavor_load "$id"
+    [ -n "$CRAN_ISSUE_KIND" ] || rcheck_die "flavor '$id' reproduces no CRAN issue kind, so there is nothing to compare it against"
+
+    local bdir; bdir=$(flavor_build_dir "$id")
+    local tsv=$bdir/CRAN/rcheck-results.tsv
+    [ -f "$tsv" ] || rcheck_die "no results at $tsv -- run '$PROG summarise $id' first"
+
+    "$REPO/tools/cran-compare.sh" --results "$tsv" --kind "$CRAN_ISSUE_KIND" "$@"
+}
+
+case $COMMAND in
+    flavors)   cmd_flavors "$@" ;;
+    describe)  cmd_describe "$@" ;;
+    lint)      cmd_lint "$@" ;;
+    pin)       cmd_pin "$@" ;;
+    build)     cmd_build "$@" ;;
+    build-r)   cmd_build_r "$@" ;;
+    check)     cmd_check "$@" ;;
+    run)       cmd_run "$@" ;;
+    summarise|summarize) cmd_summarise "$@" ;;
+    compare)   cmd_compare "$@" ;;
+    help)      usage ;;
+    *)         echo "$PROG: unknown command '$COMMAND'" >&2; usage >&2; exit 2 ;;
+esac

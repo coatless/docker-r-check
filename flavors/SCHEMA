@@ -1,0 +1,112 @@
+## Flavor definition schema
+##
+## A "flavor" is one reproducible check configuration: a base OS, a way of
+## building R, and the environment R CMD check runs under. Most flavors
+## correspond to one CRAN "additional issue" kind
+## (https://cran.r-project.org/web/checks/check_issue_kinds.html).
+##
+## Flavor files are `flavors/<FLAVOR_ID>.conf` and are sourced by bash, both on
+## the host (bin/rcheck) and inside the container (docker/lib/flavor.sh). They
+## must contain nothing but variable assignments -- no commands, no
+## conditionals -- so that they stay trivially auditable and machine-readable.
+##
+## `tests/test-flavors.sh` enforces this schema: every key below is checked for
+## presence and, where applicable, for a legal value, and any key *not* listed
+## below is rejected (so typos fail the test suite rather than being silently
+## ignored).
+##
+## ---------------------------------------------------------------------------
+## Identity
+## ---------------------------------------------------------------------------
+##
+## FLAVOR_ID        Required. Must equal the file's basename. Used for image
+##                  tags, build directories and result file names.
+## FLAVOR_TITLE     Required. One-line human description.
+## CRAN_ISSUE_KIND  Required, may be empty. The CRAN additional-issue kind this
+##                  flavor reproduces, spelled exactly as CRAN spells it (e.g.
+##                  `noLD`, `gcc-UBSAN`). Empty for control flavors that
+##                  correspond to a regular check flavor rather than an
+##                  additional issue. This is the join key used by
+##                  `rcheck compare` against CRAN's published results.
+## CRAN_HOST_OS     Required. The OS CRAN actually runs this check on, per the
+##                  CRAN team page. Recorded so that the *fidelity gap* between
+##                  our container and CRAN is explicit rather than implied;
+##                  where it differs from BASE_IMAGE, say why in NOTES.
+## TIER             Required. 1 | 2 | 3 -- implementation priority, see
+##                  docs/qa-improvement-plan.md.
+## STATUS           Required. implemented | experimental | planned
+##                  `implemented`  builds and checks are wired up end to end.
+##                  `experimental` wired up but the configuration has not been
+##                                 validated against CRAN's own results yet.
+##                  `planned`      declared for the record; not usable.
+## REFERENCE        Required, may be empty. Authoritative source for the
+##                  configuration (R-admin manual section, bdr README URL).
+##
+## ---------------------------------------------------------------------------
+## Base image
+## ---------------------------------------------------------------------------
+##
+## BASE_FAMILY      Required. debian | fedora. Only `debian` is implemented;
+##                  see docs/architecture.md ADR-0005 for the Fedora gap.
+## BASE_IMAGE       Required. Registry path without tag, e.g. docker.io/debian.
+## BASE_TAG         Required. e.g. unstable, testing, trixie.
+## APT_COMPONENTS   Debian archive components to enable, default `main`. Set to
+##                  e.g. `main contrib non-free` for flavors whose libraries are
+##                  not in main (Intel MKL). Recorded per flavor because
+##                  enabling non-free changes what the image legally is.
+##                  The digest for BASE_IMAGE:BASE_TAG is *not* stored here --
+##                  it lives in pins/base-images.json so that one pin refresh
+##                  updates every flavor sharing a base. See tools/pin-images.sh.
+##
+## ---------------------------------------------------------------------------
+## Building R
+## ---------------------------------------------------------------------------
+##
+## R_BUILD_SYSDEPS  Space-separated apt packages installed into the image on top
+##                  of `apt build-dep r-base` (e.g. an alternative BLAS, a
+##                  sanitizer runtime, valgrind).
+## R_BUILD_METHOD   cran-qa | configure
+##                  `cran-qa`   run CRAN's own build-R script from the QA SVN
+##                              checkout. Highest fidelity, but build-R sets
+##                              some of its own compiler flags, so flavors that
+##                              need to control CC/CXX cannot rely on it.
+##                  `configure` run ./configure && make ourselves, so the
+##                              flavor fully determines the toolchain. Required
+##                              for every sanitizer and for noLD.
+##                  See docs/architecture.md ADR-0003.
+## R_CONFIGURE_ARGS Extra arguments appended to ./configure.
+## R_CC R_CXX R_FC  Compiler commands, including any flags that must be baked
+##                  into the compiler driver so that *packages* inherit them
+##                  (this is how sanitizer instrumentation reaches package code:
+##                  R records CC/CXX at configure time and R CMD INSTALL reuses
+##                  them). Empty means "distribution default".
+## R_CFLAGS R_CXXFLAGS R_FFLAGS R_LDFLAGS R_MAIN_LDFLAGS
+##                  Passed through config.site.
+##
+## ---------------------------------------------------------------------------
+## Running the check
+## ---------------------------------------------------------------------------
+##
+## CHECK_RENVIRON   Newline-separated `VAR=value` lines appended to
+##                  ~/.R/check.Renviron. This is the mechanism CRAN itself uses
+##                  to configure checks, and R CMD check reads it natively, so
+##                  it works regardless of how the surrounding QA script is
+##                  invoked. Prefer this over CHECK_EXTRA_ARGS.
+## CHECK_RUNTIME_ENV
+##                  Newline-separated `VAR=value` lines exported into the
+##                  environment of the check process itself (ASAN_OPTIONS,
+##                  UBSAN_OPTIONS, ...). Unlike CHECK_RENVIRON these are needed
+##                  by the sanitizer runtimes, which are not R settings.
+## CHECK_EXTRA_ARGS Extra arguments forwarded to the check driver script.
+##                  UNVERIFIED: whether CRAN's check_CRAN_incoming forwards
+##                  unknown options to R CMD check has not been confirmed --
+##                  see docs/open-questions.md Q4. Use CHECK_RENVIRON instead
+##                  wherever an equivalent environment variable exists.
+##
+## ---------------------------------------------------------------------------
+## Documentation
+## ---------------------------------------------------------------------------
+##
+## NOTES            Free text. Record known fidelity gaps against CRAN here --
+##                  this is what `rcheck describe` prints, and it is the honest
+##                  answer to "is this really the same check CRAN runs?".

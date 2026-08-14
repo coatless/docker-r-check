@@ -1,0 +1,2 @@
+useDynLib(rcheckcanary, .registration = TRUE)
+export(canary_overflow, canary_oob_read)
