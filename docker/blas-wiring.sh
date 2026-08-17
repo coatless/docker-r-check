@@ -85,7 +85,11 @@ flavour_spec() {
 # Checked by `verify` against what R reports, in entry-build-r.sh.
 expected_fragment() {
     case "$1" in
-    reference) echo "/blas/libblas.so.3" ;;
+    # -bi is --with-blas=no --with-lapack=no, so R uses its OWN reference BLAS
+    # at $R_HOME/lib/libRblas.so and its own LAPACK -- NOT Debian's
+    # /usr/lib/<ma>/blas/libblas.so.3.  The alternatives this flavour pins are
+    # hygiene for anything else in the image that probes them; R never looks.
+    reference) echo "libRblas.so" ;;
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;
