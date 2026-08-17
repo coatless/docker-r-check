@@ -203,15 +203,25 @@ jobs:
         run: |
           # Smallest useful end-to-end proof: the image can check a package
           # with compiled code without a host-mounted R.
-          mkdir -p pkg && cd pkg
-          curl -fsSLO https://cloud.r-project.org/src/contrib/Matrix_1.7-4.tar.gz \
-            || curl -fsSLO https://cloud.r-project.org/src/contrib/xtable_1.8-4.tar.gz
-          cd ..
+          # Resolve the current version from PACKAGES: CRAN's src/contrib only
+          # serves the newest, so any hardcoded filename 404s the moment the
+          # package is updated.
+          mkdir -p pkg
+          for p in digest jsonlite; do
+            v=$(curl -fsSL https://cloud.r-project.org/src/contrib/PACKAGES \
+                | awk -v p="$p" '$0=="Package: "p{f=1;next} f&&/^Version:/{print $2;exit}')
+            [ -n "$v" ] || { echo "could not resolve a version for $p" >&2; exit 1; }
+            echo "fetching ${p}_${v}.tar.gz"
+            curl -fsSL -o "pkg/${p}_${v}.tar.gz" \
+              "https://cloud.r-project.org/src/contrib/${p}_${v}.tar.gz"
+          done
+          ls -l pkg/
           {
             echo "### R CMD check ($FLAVOUR)"
             echo '```'
-            docker run --rm -v "$PWD/pkg:/pkg:ro" --entrypoint /build/bin/R \
-              "rcc-standalone:$FLAVOUR" CMD check --no-manual --no-vignettes \
-              /pkg/*.tar.gz 2>&1 | tail -25
+            docker run --rm -v "$PWD/pkg:/pkg:ro" -w /tmp \
+              --entrypoint /build/bin/R "rcc-standalone:$FLAVOUR" \
+              CMD check --no-manual --no-vignettes /pkg/digest_*.tar.gz /pkg/jsonlite_*.tar.gz \
+              2>&1 | grep -E '^\*|Status|WARNING|NOTE|ERROR' | tail -30
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
