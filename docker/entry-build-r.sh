@@ -46,4 +46,18 @@ export PATH=/src/QA/bin:$PATH
 export MAKE=${MAKE-make}
 export MAKEFLAGS=${MAKEFLAGS-"-j2"}
 
-exec build-R "$@"
+rc=0
+build-R "$@" || rc=$?
+
+## build-R ends in a pipeline through tee, so its exit status is always 0.
+## Check that it produced a working R instead.
+if [ ! -x /build/bin/R ] || ! /build/bin/R --version >/dev/null 2>&1; then
+    echo '' >&2
+    echo "** ERROR: R was not built.  /build/bin/R is missing or does not run." >&2
+    echo "   build-R exited $rc, but that status comes from tee and does not" >&2
+    echo "   reflect the build.  See /build/log for what actually happened." >&2
+    echo '' >&2
+    exit 1
+fi
+
+exit $rc

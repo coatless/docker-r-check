@@ -31,7 +31,8 @@ the entrypoint passes any arguments to build-R and also honors the following env
 MAKE, MAKEFLAGS and NO_UPDATE (see below)
 
 pkgcheck (uses build-r) - this one is just trivial image to run entry-pkgcheck.sh which
-  is just a call to check_packages_in_dir()
+  is a call to check_CRAN_incoming -n from the QA tree in /src/QA
+  (-n is required: bin/getIncoming is not in the tree)
   it works off /pkg (if mounted) or /build/pkg (if re-using the /build mount).
   It will require R built with the above build-r image.
 

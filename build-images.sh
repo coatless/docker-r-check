@@ -24,13 +24,13 @@ docker build \
   --build-arg DEBIAN_TAG=${DEBIAN_TAG} \
   --build-arg DEBIAN_MIRROR=${DEBIAN_MIRROR} \
   --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
-  --build-arg R_BUILD_SYSDEPS=${R_BUILD_SYSDEPS} \
+  --build-arg R_BUILD_SYSDEPS="${R_BUILD_SYSDEPS}" \
   --target build-r -t rchk-build-r:${DEBIAN_TAG}-${FLAVOR_TAG} .
 
 docker build \
   --build-arg DEBIAN_TAG=${DEBIAN_TAG} \
   --build-arg DEBIAN_MIRROR=${DEBIAN_MIRROR} \
   --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
-  --build-arg R_BUILD_SYSDEPS=${R_BUILD_SYSDEPS} \
+  --build-arg R_BUILD_SYSDEPS="${R_BUILD_SYSDEPS}" \
   --target pkgcheck -t rchk-pkgcheck:${DEBIAN_TAG}-${FLAVOR_TAG} .
 
