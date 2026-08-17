@@ -228,8 +228,14 @@ jobs:
           for t in pkg/*.tar.gz; do set -- "$@" "/pkg/$(basename "$t")"; done
           echo "checking: $*"
 
+          # _R_CHECK_FORCE_SUGGESTS_=false because this is a smoke test with no
+          # package library: R defaults to erroring on absent Suggests, which
+          # says nothing about the image.  CRAN's real profile keeps it on, and
+          # the runner supplies a populated library -- see docs on the check
+          # environment before copying this line anywhere that scores results.
           rc=0
           docker run --rm -v "$PWD/pkg:/pkg:ro" -w /tmp \
+            -e _R_CHECK_FORCE_SUGGESTS_=false \
             --entrypoint /build/bin/R "rcc-standalone:$FLAVOUR" \
             CMD check --no-manual --no-vignettes "$@" > check.log 2>&1 || rc=$?
           echo "R CMD check exit: $rc"
