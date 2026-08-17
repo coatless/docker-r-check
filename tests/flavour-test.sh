@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 W="${RCC_WIRING:-$ROOT/docker/blas-wiring.sh}"
 SETUP="${RCC_SETUP:-$ROOT/docker/flavour-setup.sh}"
-FLAVOURS="${RCC_FLAVOURS:-$ROOT/flavours}"
+FLAVOURS="${RCC_FLAVOURS:-$ROOT/docker/flavours}"
 
 # Abort if the thing under test is missing.  Without this the NEGATIVE cases
 # below pass for the wrong reason -- a missing script "fails" exactly like a

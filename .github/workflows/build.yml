@@ -103,7 +103,7 @@ jobs:
             docker images "rcc-$TARGET:$TAG" --format '{{.Repository}}:{{.Tag}}  {{.Size}}' || true
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: what is actually in it
+      - name: contents of base
         if: steps.build.outputs.built == '1'
         env:
           TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
@@ -130,3 +130,88 @@ jobs:
             docker run --rm "$img" sh -c \
               "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | grep -E 'texlive|context' | awk '{s+=\$1; n++} END {printf \"%d packages, %.2f GiB\\n\", n, s/1048576}'"
           } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Does an arm build end to end, with R inside, and is it running the BLAS it
+  # says it is?  This is the first R build anywhere in this project.
+  standalone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        flavour: [reference, openblas]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: reclaim disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: build
+        id: build
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+        run: |
+          set -o pipefail
+          cd docker
+          docker build \
+            --progress=plain \
+            --build-arg DEBIAN_TAG=trixie \
+            --build-arg RCC_FLAVOUR="$FLAVOUR" \
+            --build-arg R_SVN_REV=90410 \
+            --build-arg QA_SVN_REV=6927 \
+            --build-arg MAKEFLAGS=-j4 \
+            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --target standalone \
+            -t "rcc-standalone:$FLAVOUR" . 2>&1 | tail -300
+          echo "built=1" >> "$GITHUB_OUTPUT"
+
+      - name: what did we actually get
+        if: steps.build.outputs.built == '1'
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+        run: |
+          img="rcc-standalone:$FLAVOUR"
+          {
+            echo "## $FLAVOUR"
+            echo '```'
+            docker run --rm --entrypoint sh "$img" -c 'cat /etc/rcheck/manifest.txt'
+            echo '```'
+            echo "### R sees"
+            echo '```'
+            docker run --rm --entrypoint /build/bin/R "$img" --no-echo --vanilla -e '
+              cat("R          :", R.version.string, "\n")
+              cat("svn rev    :", R.version$"svn rev", "\n")
+              cat("BLAS       :", extSoftVersion()[["BLAS"]], "\n")
+              cat("LAPACK     :", La_library(), La_version(), "\n")
+              set.seed(1); m <- crossprod(matrix(rnorm(1e4), 100))
+              cat("chol ok    :", isTRUE(all.equal(crossprod(chol(m)), m)), "\n")
+              cat("svd d[1]   :", format(svd(m)$d[1], digits = 15), "\n")
+              cat("det        :", format(determinant(m)$modulus, digits = 15), "\n")'
+            echo '```'
+            echo "### image size"
+            docker images "$img" --format '{{.Size}}'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: R CMD check a real package
+        if: steps.build.outputs.built == '1'
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+        run: |
+          # Smallest useful end-to-end proof: the image can check a package
+          # with compiled code without a host-mounted R.
+          mkdir -p pkg && cd pkg
+          curl -fsSLO https://cloud.r-project.org/src/contrib/Matrix_1.7-4.tar.gz \
+            || curl -fsSLO https://cloud.r-project.org/src/contrib/xtable_1.8-4.tar.gz
+          cd ..
+          {
+            echo "### R CMD check ($FLAVOUR)"
+            echo '```'
+            docker run --rm -v "$PWD/pkg:/pkg:ro" --entrypoint /build/bin/R \
+              "rcc-standalone:$FLAVOUR" CMD check --no-manual --no-vignettes \
+              /pkg/*.tar.gz 2>&1 | tail -25
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

@@ -2,7 +2,7 @@
 # Every flavour value must be quoted: flavour-setup.sh sources these files, so
 # an unquoted value containing a space is executed as a command.
 set -eu
-d="${1:-flavours}"; bad=0
+d="${1:-docker/flavours}"; bad=0
 for f in "$d"/*.env; do
     if grep -E '^RCC_[A-Z0-9_]+=' "$f" | grep -qvE '^RCC_[A-Z0-9_]+="'; then
         echo "unquoted value in $f:" >&2

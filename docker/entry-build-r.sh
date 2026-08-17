@@ -38,6 +38,26 @@ mkdir -p ~/.R
 ## copy .R settings
 cp -p /src/QA/.R/* ~/.R/
 
+## Two files in Kurt's .R/ are specific to his machine and must not survive
+## into a container that claims to give the same answer anywhere.
+##
+## .R/config hard-codes -mtune=native in CFLAGS/CXXFLAGS/FFLAGS, and R's
+## configure sources ${HOME}/.R/config -- so without this every gcc-flavour R
+## is compiled for whatever CPU the builder happened to have.  Note .R/Makevars
+## is clean; config is the one that does it, which is why reading only Makevars
+## gives a false all-clear.
+if [ -e ~/.R/config ]; then
+    sed -i 's/[[:space:]]*-mtune=native//g' ~/.R/config
+    if grep -q -- '-mtune=native' ~/.R/config; then
+        echo "** ERROR: failed to strip -mtune=native from ~/.R/config" >&2
+        exit 1
+    fi
+fi
+
+## .R/Rprofile points at file:///data/Repositories/CRAN, emacsclient, firefox
+## and evince, none of which exist here.  entry-pkgcheck.sh writes a usable one.
+rm -f ~/.R/Rprofile
+
 cd /build
 export PATH=/src/QA/bin:$PATH
 
