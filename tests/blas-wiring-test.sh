@@ -2,21 +2,39 @@
 # Test blas-wiring.sh against real Debian packages, including the negative case.
 set -u
 export DEBIAN_FRONTEND=noninteractive
-W=/wiring.sh
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  \033[32mPASS\033[0m %s\n' "$1"; }
 no()  { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s\n' "$1"; }
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
+# Locate the scripts relative to this file, so the suite runs the same way from
+# a bind mount, a checkout, or a CI container.  RCC_WIRING overrides.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+W="${RCC_WIRING:-$ROOT/docker/blas-wiring.sh}"
+SETUP="${RCC_SETUP:-$ROOT/docker/flavour-setup.sh}"
+FLAVOURS="${RCC_FLAVOURS:-$ROOT/docker/flavours}"
+
+# Stop if the script under test is missing. Otherwise the cases that expect
+# a failure would pass, because a missing script also fails.
+for f in "$W" "$SETUP"; do
+    [ -r "$f" ] || { echo "FATAL: not found: $f" >&2; exit 2; }
+done
+[ -d "$FLAVOURS" ] || { echo "FATAL: no flavours dir: $FLAVOURS" >&2; exit 2; }
+
+
 apt-get update -qq 2>/dev/null
 # Same starting point as the real base. pthread OpenBLAS is present because
-# libsuperlu-dev depends on it.
-apt-get install -y -qq libopenblas0-serial libopenblas0-pthread libblas3 liblapack3 libgfortran5 curl >/dev/null 2>&1
+# libsuperlu-dev depends on it. The -dev packages matter because configure's
+# -lopenblas test uses the link-time alternatives, which pthread also wins.
+apt-get install -y -qq libopenblas0-serial libopenblas-serial-dev \
+  libopenblas0-pthread libopenblas-pthread-dev \
+  libblas3 liblapack3 libgfortran5 curl >/dev/null 2>&1
 
 say "state before any wiring (pthread wins on priority)"
 sh $W show | sed 's/^/  /'
 
-say "T1  openblas: apply must move ALL THREE groups to serial"
+say "T1  openblas: apply must move every runtime AND link-time group to serial"
 if sh $W apply openblas >/dev/null 2>&1; then ok "apply exited 0"; else no "apply exited nonzero"; fi
 r=$(readlink -f /usr/lib/x86_64-linux-gnu/libopenblas.so.0)
 case "$r" in *openblas-serial*) ok "libopenblas.so.0 -> serial  ($r)";;

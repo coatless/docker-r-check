@@ -32,10 +32,16 @@ flavour_spec() {
             "liblapack.so.3-$MA|$L/lapack/liblapack.so.3"
         ;;
     openblas)
+        # Runtime groups, which R loads, and link-time groups, which
+        # configure's -lopenblas test uses. The pthread packages outrank the
+        # serial ones in both.
         printf '%s\n' \
             "libopenblas.so.0-$MA|$L/openblas-serial/libopenblas.so.0" \
             "libblas.so.3-$MA|$L/openblas-serial/libblas.so.3" \
-            "liblapack.so.3-$MA|$L/openblas-serial/liblapack.so.3"
+            "liblapack.so.3-$MA|$L/openblas-serial/liblapack.so.3" \
+            "libopenblas.so-$MA|$L/openblas-serial/libopenblas.so" \
+            "libblas.so-$MA|$L/openblas-serial/libblas.so" \
+            "liblapack.so-$MA|$L/openblas-serial/liblapack.so"
         ;;
     atlas)
         printf '%s\n' \
@@ -62,7 +68,9 @@ flavour_spec() {
 # assert-r-blas.sh.
 expected_fragment() {
     case "$1" in
-    reference) echo "/blas/libblas.so.3" ;;
+    # -bi builds R with its own BLAS at $R_HOME/lib/libRblas.so, so that is
+    # what R reports, whatever the Debian alternatives say.
+    reference) echo "libRblas.so" ;;
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;

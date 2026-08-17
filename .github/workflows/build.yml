@@ -1,0 +1,267 @@
+name: build
+
+on:
+  push:
+    branches: [debian-blas-arms]
+  workflow_dispatch:
+    inputs:
+      debian_tag:
+        description: Debian suite for the base image
+        default: trixie
+      target:
+        description: Dockerfile target to build
+        default: base
+
+permissions:
+  contents: read
+
+jobs:
+  # Quick tests of the BLAS scripts in a plain Debian container.
+  wiring:
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim
+    steps:
+      - name: tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq git curl ca-certificates binutils shellcheck
+
+      - uses: actions/checkout@v5
+
+      - name: lint
+        run: |
+          sh tests/lint-flavours.sh
+          shellcheck -S warning docker/blas-wiring.sh docker/flavour-setup.sh
+
+      - name: blas wiring
+        run: bash tests/blas-wiring-test.sh
+
+      - name: flavours
+        run: |
+          # pthread OpenBLAS is installed, as it is in the real base.
+          apt-get install -y -qq libsuperlu-dev
+          bash tests/flavour-test.sh
+
+  # Build the base image and record how much disk it uses.
+  base:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: disk before
+        run: |
+          echo "## disk before" >> "$GITHUB_STEP_SUMMARY"
+          df -h / | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: reclaim disk
+        run: |
+          # Free disk space on the runner.
+          before=$(df --output=avail -BG / | tail -1 | tr -dc 0-9)
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          after=$(df --output=avail -BG / | tail -1 | tr -dc 0-9)
+          echo "reclaimed $((after - before)) GiB, now ${after} GiB free"
+          {
+            echo "## after reclaim"
+            echo "reclaimed **$((after - before)) GiB**, now **${after} GiB** free"
+          } >> "$GITHUB_STEP_SUMMARY"
+          df -h / >> "$GITHUB_STEP_SUMMARY"
+
+      - name: add swap
+        run: |
+          # Exporting the finished image takes about 15 GiB of memory, which is
+          # all a runner has. Without more swap the runner is shut down.
+          sudo fallocate -l 16G /rcc-swap
+          sudo chmod 600 /rcc-swap
+          sudo mkswap /rcc-swap > /dev/null
+          sudo swapon /rcc-swap
+          free -h
+
+      - name: build
+        id: build
+        env:
+          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TARGET: ${{ github.event.inputs.target || 'base' }}
+        run: |
+          set -o pipefail
+          cd docker
+          docker build \
+            --progress=plain \
+            --build-arg DEBIAN_TAG="$TAG" \
+            --target "$TARGET" \
+            -t "rcc-$TARGET:$TAG" . 2>&1 | tail -400
+          echo "built=1" >> "$GITHUB_OUTPUT"
+
+      - name: measure
+        if: always()
+        env:
+          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TARGET: ${{ github.event.inputs.target || 'base' }}
+        run: |
+          {
+            echo "## after build"
+            df -h /
+            echo ""
+            echo "### image"
+            docker images "rcc-$TARGET:$TAG" --format '{{.Repository}}:{{.Tag}}  {{.Size}}' || true
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: contents of base
+        if: steps.build.outputs.built == '1'
+        env:
+          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TARGET: ${{ github.event.inputs.target || 'base' }}
+        run: |
+          img="rcc-$TARGET:$TAG"
+          # tee, so the numbers are in the log as well as the job summary.
+          {
+            echo "## contents"
+            echo "packages installed: $(docker run --rm "$img" sh -c "dpkg-query -f '.\n' -W | wc -l")"
+            echo ""
+            echo "### largest 20"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | sort -rn | head -20"
+            echo ""
+            echo "### did the aasc.sources fixes take?"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -W -f='rcheckserver \${Version}\n' rcheckserver 2>/dev/null || echo 'rcheckserver ABSENT'"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -W -f='quarto \${Version}\n' quarto 2>/dev/null || echo 'quarto ABSENT -- non-free component missing'"
+            echo ""
+            echo "### texlive share"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | grep -E 'texlive|context' | awk '{s+=\$1; n++} END {printf \"%d packages, %.2f GiB\\n\", n, s/1048576}'"
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Build each arm with R inside and report the BLAS and LAPACK R loads.
+  standalone:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        flavour: [reference, openblas]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: reclaim disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: add swap
+        run: |
+          # Exporting the finished image takes about 15 GiB of memory, which is
+          # all a runner has. Without more swap the runner is shut down.
+          sudo fallocate -l 16G /rcc-swap
+          sudo chmod 600 /rcc-swap
+          sudo mkswap /rcc-swap > /dev/null
+          sudo swapon /rcc-swap
+          free -h
+
+      - name: build
+        id: build
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+        run: |
+          set -o pipefail
+          cd docker
+          docker build \
+            --progress=plain \
+            --build-arg DEBIAN_TAG=trixie \
+            --build-arg RCC_FLAVOUR="$FLAVOUR" \
+            --build-arg R_SVN_REV=90410 \
+            --build-arg QA_SVN_REV=6927 \
+            --build-arg MAKEFLAGS=-j4 \
+            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --target standalone \
+            -t "rcc-standalone:$FLAVOUR" . 2>&1 | tail -300
+          echo "built=1" >> "$GITHUB_OUTPUT"
+
+      - name: what did we actually get
+        if: steps.build.outputs.built == '1'
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+        run: |
+          img="rcc-standalone:$FLAVOUR"
+          {
+            echo "## $FLAVOUR"
+            echo '```'
+            docker run --rm --entrypoint sh "$img" -c 'cat /etc/rcheck/manifest.txt'
+            echo '```'
+            echo "### R sees"
+            echo '```'
+            docker run --rm --entrypoint /build/bin/R "$img" --no-echo --vanilla -e '
+              cat("R          :", R.version.string, "\n")
+              cat("svn rev    :", R.version$"svn rev", "\n")
+              cat("BLAS       :", extSoftVersion()[["BLAS"]], "\n")
+              cat("LAPACK     :", La_library(), La_version(), "\n")
+              set.seed(1); m <- crossprod(matrix(rnorm(1e4), 100))
+              cat("chol ok    :", isTRUE(all.equal(crossprod(chol(m)), m)), "\n")
+              cat("svd d[1]   :", format(svd(m)$d[1], digits = 15), "\n")
+              cat("det        :", format(determinant(m)$modulus, digits = 15), "\n")'
+            echo '```'
+            echo "### image size"
+            docker images "$img" --format '{{.Size}}'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: R CMD check a real package
+        if: steps.build.outputs.built == '1'
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+        run: |
+          # Check two packages with compiled code in the image. The current
+          # version comes from PACKAGES, because src/contrib only serves the
+          # newest one.
+          mkdir -p pkg
+          for p in digest jsonlite; do
+            v=$(curl -fsSL https://cloud.r-project.org/src/contrib/PACKAGES \
+                | awk -v p="$p" '$0=="Package: "p{f=1;next} f&&/^Version:/{print $2;exit}')
+            [ -n "$v" ] || { echo "could not resolve a version for $p" >&2; exit 1; }
+            echo "fetching ${p}_${v}.tar.gz"
+            curl -fsSL -o "pkg/${p}_${v}.tar.gz" \
+              "https://cloud.r-project.org/src/contrib/${p}_${v}.tar.gz"
+          done
+          ls -l pkg/
+          # Capture the output first, then filter it, so a container that never
+          # started cannot pass with an empty log. Pass explicit file names. A
+          # /pkg/*.tar.gz glob would be expanded by the host shell, where /pkg
+          # does not exist.
+          set --
+          for t in pkg/*.tar.gz; do set -- "$@" "/pkg/$(basename "$t")"; done
+          echo "checking: $*"
+
+          # _R_CHECK_FORCE_SUGGESTS_=false because the image has no package
+          # library, and missing Suggests would otherwise be an error.
+          rc=0
+          docker run --rm -v "$PWD/pkg:/pkg:ro" -w /tmp \
+            -e _R_CHECK_FORCE_SUGGESTS_=false \
+            --entrypoint /build/bin/R "rcc-standalone:$FLAVOUR" \
+            CMD check --no-manual --no-vignettes "$@" > check.log 2>&1 || rc=$?
+          echo "R CMD check exit: $rc"
+
+          if ! grep -q '^Status' check.log; then
+            echo "** no Status line: R CMD check did not run to completion" >&2
+            echo "---- full output ----" >&2
+            cat check.log >&2
+            exit 1
+          fi
+
+          # rc=1 means the package was not clean, which is not a fault in the
+          # image. The step passes when a check ran to a Status line.
+          {
+            echo "### R CMD check ($FLAVOUR) -- exit $rc"
+            echo '```'
+            grep -E '^\*|^Status' check.log | head -60
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$rc" -ne 0 ]; then
+            echo "---- full check log ----"
+            cat check.log
+          fi
