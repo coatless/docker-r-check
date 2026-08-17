@@ -1,0 +1,11 @@
+One file per arm, sourced by docker/flavour-setup.sh inside the image.
+
+  RCC_DEBIAN_TAG    Debian suite the arm was written for
+  RCC_ARCH          restrict to one architecture, empty = any
+  RCC_SYSDEPS       apt packages
+  RCC_SYSDEB_URLS   .deb files fetched by URL (for packages no longer in the suite)
+  RCC_APT_PIN       apt preferences content, applied before RCC_SYSDEB_URLS
+  RCC_APT_HOLD      packages to apt-mark hold after install
+  RCC_RCONF_FLAGS   flags passed through build-R to Rconf
+  RCC_LDFLAGS       appended to the configure line
+  RCC_DESC          one-line description, written to /etc/rcheck/flavour.txt

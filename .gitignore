@@ -1,0 +1,6 @@
+# Working notes and design records are kept locally, not in the history.
+docs/
+results/
+build/
+pkg/
+*.deb
