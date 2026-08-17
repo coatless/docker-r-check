@@ -1,0 +1,128 @@
+name: build
+
+on:
+  push:
+    branches: [debian-blas-arms]
+  workflow_dispatch:
+    inputs:
+      debian_tag:
+        description: Debian suite for the base image
+        default: trixie
+      target:
+        description: Dockerfile target to build
+        default: base
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast, and independent of whether the image builds at all.  Runs natively
+  # amd64 inside the same suite the images use.
+  wiring:
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    steps:
+      - name: tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq git curl ca-certificates binutils shellcheck
+
+      - uses: actions/checkout@v5
+
+      - name: lint
+        run: |
+          sh tests/lint-flavours.sh
+          shellcheck -S warning docker/blas-wiring.sh docker/flavour-setup.sh
+
+      - name: blas wiring
+        run: bash tests/blas-wiring-test.sh
+
+      - name: flavours
+        run: |
+          # The suite the arms target, with the pthread build present the way
+          # the rcheckserver closure would supply it.
+          apt-get install -y -qq libsuperlu-dev
+          bash tests/flavour-test.sh
+
+  # The open question: does the rcheckserver closure fit a GitHub runner?
+  # Every step records df, so a failure is still a measurement.
+  base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: disk before
+        run: |
+          echo "## disk before" >> "$GITHUB_STEP_SUMMARY"
+          df -h / | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: reclaim disk
+        run: |
+          # Inline rather than a third-party action: this is a funded
+          # infrastructure deliverable and the reclaim is four rm -rf calls.
+          before=$(df --output=avail -BG / | tail -1 | tr -dc 0-9)
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          after=$(df --output=avail -BG / | tail -1 | tr -dc 0-9)
+          echo "reclaimed $((after - before)) GiB, now ${after} GiB free"
+          {
+            echo "## after reclaim"
+            echo "reclaimed **$((after - before)) GiB**, now **${after} GiB** free"
+          } >> "$GITHUB_STEP_SUMMARY"
+          df -h / >> "$GITHUB_STEP_SUMMARY"
+
+      - name: build
+        id: build
+        env:
+          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TARGET: ${{ github.event.inputs.target || 'base' }}
+        run: |
+          set -o pipefail
+          cd docker
+          docker build \
+            --progress=plain \
+            --build-arg DEBIAN_TAG="$TAG" \
+            --target "$TARGET" \
+            -t "rcc-$TARGET:$TAG" . 2>&1 | tail -400
+          echo "built=1" >> "$GITHUB_OUTPUT"
+
+      - name: measure
+        if: always()
+        env:
+          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TARGET: ${{ github.event.inputs.target || 'base' }}
+        run: |
+          {
+            echo "## after build"
+            df -h /
+            echo ""
+            echo "### image"
+            docker images "rcc-$TARGET:$TAG" --format '{{.Repository}}:{{.Tag}}  {{.Size}}' || true
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: what is actually in it
+        if: steps.build.outputs.built == '1'
+        env:
+          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TARGET: ${{ github.event.inputs.target || 'base' }}
+        run: |
+          img="rcc-$TARGET:$TAG"
+          n=$(docker run --rm "$img" sh -c "dpkg-query -f '.\n' -W | wc -l")
+          echo "## contents" >> "$GITHUB_STEP_SUMMARY"
+          echo "**$n** packages installed" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          docker run --rm "$img" sh -c \
+            "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | sort -rn | head -20" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # The two things most likely to be silently missing.
+          echo "### did the AASC fixes take?" >> "$GITHUB_STEP_SUMMARY"
+          docker run --rm "$img" sh -c \
+            "dpkg-query -W -f='rcheckserver \${Version}\n' rcheckserver 2>/dev/null || echo 'rcheckserver ABSENT'" \
+            >> "$GITHUB_STEP_SUMMARY"
+          docker run --rm "$img" sh -c \
+            "dpkg-query -W -f='quarto \${Version}\n' quarto 2>/dev/null || echo 'quarto ABSENT (non-free component missing?)'" \
+            >> "$GITHUB_STEP_SUMMARY"
