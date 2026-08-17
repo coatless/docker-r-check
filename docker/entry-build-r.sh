@@ -46,4 +46,21 @@ export PATH=/src/QA/bin:$PATH
 export MAKE=${MAKE-make}
 export MAKEFLAGS=${MAKEFLAGS-"-j2"}
 
-exec build-R "$@"
+rc=0
+build-R "$@" || rc=$?
+
+## build-R runs the whole build as a single pipeline ending in `tee`, under
+## /bin/sh, with neither `set -e` nor `pipefail`.  Its exit status is therefore
+## tee's, which is 0 whatever the build did.  Verify the artefact instead:
+## without this, a failed build leaves the container reporting success and
+## anything driving it in CI publishes a broken image as a green one.
+if [ ! -x /build/bin/R ] || ! /build/bin/R --version >/dev/null 2>&1; then
+    echo '' >&2
+    echo "** ERROR: R was not built.  /build/bin/R is missing or does not run." >&2
+    echo "   build-R exited $rc, but that status comes from tee and does not" >&2
+    echo "   reflect the build.  See /build/log for what actually happened." >&2
+    echo '' >&2
+    exit 1
+fi
+
+exit $rc
