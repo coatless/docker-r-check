@@ -26,12 +26,17 @@ done
 
 apt-get update -qq 2>/dev/null
 # The realistic base: pthread present because libsuperlu-dev pulls it in.
-apt-get install -y -qq libopenblas0-serial libopenblas0-pthread libblas3 liblapack3 libgfortran5 curl >/dev/null 2>&1
+# The -dev packages matter: configure's -lopenblas test resolves the
+# link-time alternatives, which are a separate set from the runtime ones
+# and are hijacked by pthread in exactly the same way.
+apt-get install -y -qq libopenblas0-serial libopenblas-serial-dev \
+  libopenblas0-pthread libopenblas-pthread-dev \
+  libblas3 liblapack3 libgfortran5 curl >/dev/null 2>&1
 
 say "state before any wiring (pthread wins on priority)"
 sh $W show | sed 's/^/  /'
 
-say "T1  openblas: apply must move ALL THREE groups to serial"
+say "T1  openblas: apply must move every runtime AND link-time group to serial"
 if sh $W apply openblas >/dev/null 2>&1; then ok "apply exited 0"; else no "apply exited nonzero"; fi
 r=$(readlink -f /usr/lib/x86_64-linux-gnu/libopenblas.so.0)
 case "$r" in *openblas-serial*) ok "libopenblas.so.0 -> serial  ($r)";;

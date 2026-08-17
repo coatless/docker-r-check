@@ -46,10 +46,18 @@ flavour_spec() {
             "liblapack.so.3-$MA|$L/lapack/liblapack.so.3"
         ;;
     openblas)
+        # Runtime groups (what a built R loads) AND link-time groups (what
+        # configure's -lopenblas test resolves).  Both matter and they are
+        # separate: libopenblas-pthread-dev is in the base via
+        # libsuperlu-dev -> libopenblas-dev, and outranks serial at link time
+        # exactly as the runtime package does at load time.
         printf '%s\n' \
             "libopenblas.so.0-$MA|$L/openblas-serial/libopenblas.so.0" \
             "libblas.so.3-$MA|$L/openblas-serial/libblas.so.3" \
-            "liblapack.so.3-$MA|$L/openblas-serial/liblapack.so.3"
+            "liblapack.so.3-$MA|$L/openblas-serial/liblapack.so.3" \
+            "libopenblas.so-$MA|$L/openblas-serial/libopenblas.so" \
+            "libblas.so-$MA|$L/openblas-serial/libblas.so" \
+            "liblapack.so-$MA|$L/openblas-serial/liblapack.so"
         ;;
     atlas)
         printf '%s\n' \
