@@ -47,14 +47,32 @@ ARG GID=1000
 ## setup a build user + sudo
 RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y install sudo && /sbin/groupadd -g ${GID} rbuild && /sbin/useradd -m -u ${UID} -g ${GID} rbuild && echo 'rbuild ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/10rbuild
 
+## SVN revisions to check out. Empty means trunk HEAD, so set both for a
+## build that should be repeatable.
+ARG R_SVN_REV=
+ARG QA_SVN_REV=
+
 ## prepare sources if not mounted so we can cache long pulls (mostly relevant to remote places like NZ ;))
 RUN mkdir -p /src && \
-    svn co https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt /src/QA && \
-    svn co https://svn.r-project.org/R/trunk /src/R && ( cd /src/R && tools/rsync-recommended ) && \
+    svn co ${QA_SVN_REV:+-r ${QA_SVN_REV}} https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt /src/QA && \
+    svn co ${R_SVN_REV:+-r ${R_SVN_REV}} https://svn.r-project.org/R/trunk /src/R && ( cd /src/R && tools/rsync-recommended ) && \
+    ( cd /src/R && svn info --show-item revision > /etc/rcheck-r-svn-rev ) && \
+    ( cd /src/QA && svn info --show-item revision > /etc/rcheck-qa-svn-rev ) && \
     chown -R rbuild:rbuild /src
 
 ## install additional sysdeps
 RUN if [ -n "${R_BUILD_SYSDEPS}" ]; then apt-get update -qq && DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y install ${R_BUILD_SYSDEPS}; fi
+
+## The arm. Empty leaves the image as upstream builds it. The BLAS must be
+## installed and selected before R is built, because R's configure links
+## against whatever is selected at that point.
+ARG RCC_FLAVOUR=
+COPY blas-wiring.sh flavour-setup.sh assert-r-blas.sh /opt/rcheck/
+COPY flavours /opt/rcheck/flavours
+RUN chmod 0755 /opt/rcheck/*.sh && \
+    if [ -n "${RCC_FLAVOUR}" ]; then \
+        sh /opt/rcheck/flavour-setup.sh "${RCC_FLAVOUR}" /opt/rcheck/flavours; \
+    fi
 
 ## copy the entrypoint which will update SVN (unless NO_UPDATE is set) and run the build
 COPY entry-build-r.sh /entry-build-r.sh
@@ -67,5 +85,55 @@ ENTRYPOINT [ "/bin/bash", "/entry-build-r.sh" ]
 FROM build-r AS pkgcheck
 
 COPY entry-pkgcheck.sh /entry-pkgcheck.sh
+ENTRYPOINT [ "/bin/bash", "/entry-pkgcheck.sh" ]
+
+
+## Target: standalone - pkgcheck with R already built inside.
+##
+## build-r and pkgcheck expect a host directory mounted at /build and compile
+## R into it. Here R is built into /build inside the image, in the same
+## layout, so entry-pkgcheck.sh works unchanged and nothing needs mounting.
+##
+##   docker build --target standalone \
+##     --build-arg RCC_FLAVOUR=openblas --build-arg R_SVN_REV=90393 .
+FROM pkgcheck AS standalone
+
+ARG RCC_FLAVOUR=reference
+ARG MAKEFLAGS=-j4
+ARG BUILD_DATE=
+
+USER root
+RUN install -d -o rbuild -g rbuild /build
+USER rbuild
+
+## NO_UPDATE=1 keeps the entrypoint from updating the pinned sources.
+RUN set -eu; \
+    . /opt/rcheck/flavours/${RCC_FLAVOUR}.env; \
+    echo "building R for flavour ${RCC_FLAVOUR} with Rconf ${RCC_RCONF_FLAGS}"; \
+    NO_UPDATE=1 MAKEFLAGS="${MAKEFLAGS}" \
+        /bin/bash /entry-build-r.sh ${RCC_RCONF_FLAGS} ${RCC_LDFLAGS}
+
+## Check that R runs, that the BLAS selection is still in place, and that R
+## itself loads the arm's BLAS. Then record what was built.
+USER root
+RUN set -eu; \
+    /build/bin/R --version; \
+    sh /opt/rcheck/blas-wiring.sh verify "${RCC_FLAVOUR}"; \
+    sh /opt/rcheck/assert-r-blas.sh "${RCC_FLAVOUR}" /build/bin/R; \
+    { \
+      echo "flavour: ${RCC_FLAVOUR}"; \
+      echo "built: ${BUILD_DATE:-unrecorded}"; \
+      echo "r_svn_rev: $(cat /etc/rcheck-r-svn-rev 2>/dev/null || echo unknown)"; \
+      echo "qa_svn_rev: $(cat /etc/rcheck-qa-svn-rev 2>/dev/null || echo unknown)"; \
+      echo "debian: $(. /etc/os-release; echo "$VERSION_CODENAME")"; \
+      echo "glibc: $(ldd --version | head -n1)"; \
+      cat /etc/rcheck/r-blas.txt 2>/dev/null || true; \
+    } > /etc/rcheck/manifest.txt; \
+    cat /etc/rcheck/manifest.txt
+
+LABEL org.opencontainers.image.title="r-check-containers" \
+      org.opencontainers.image.description="CRAN additional-check arm, R built in"
+
+USER rbuild
 ENTRYPOINT [ "/bin/bash", "/entry-pkgcheck.sh" ]
 
