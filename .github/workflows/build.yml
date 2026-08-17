@@ -216,12 +216,27 @@ jobs:
               "https://cloud.r-project.org/src/contrib/${p}_${v}.tar.gz"
           done
           ls -l pkg/
+          # Capture first, filter second, and assert the check actually ran.
+          # Piping docker straight into grep|tail makes the step's exit status
+          # tail's, so a container that never started reports success with an
+          # empty log -- which is exactly what happened the first time.
+          rc=0
+          docker run --rm -v "$PWD/pkg:/pkg:ro" \
+            --entrypoint /build/bin/R "rcc-standalone:$FLAVOUR" \
+            CMD check --no-manual --no-vignettes \
+            /pkg/digest_*.tar.gz /pkg/jsonlite_*.tar.gz > check.log 2>&1 || rc=$?
+          echo "R CMD check exit: $rc"
+
+          if ! grep -q '^Status' check.log; then
+            echo "** no Status line: R CMD check did not run to completion" >&2
+            echo "---- full output ----" >&2
+            cat check.log >&2
+            exit 1
+          fi
+
           {
-            echo "### R CMD check ($FLAVOUR)"
+            echo "### R CMD check ($FLAVOUR) -- exit $rc"
             echo '```'
-            docker run --rm -v "$PWD/pkg:/pkg:ro" -w /tmp \
-              --entrypoint /build/bin/R "rcc-standalone:$FLAVOUR" \
-              CMD check --no-manual --no-vignettes /pkg/digest_*.tar.gz /pkg/jsonlite_*.tar.gz \
-              2>&1 | grep -E '^\*|Status|WARNING|NOTE|ERROR' | tail -30
+            grep -E '^\* checking (whether|for|examples|tests|R code|compiled)|^Status|^\* using' check.log | head -40
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
