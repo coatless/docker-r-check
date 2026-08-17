@@ -1,0 +1,12 @@
+One file per check arm.  Sourced by docker/flavour-setup.sh inside the image and
+by build-images.sh on the host, so the two cannot disagree about what an arm is.
+
+  RCC_DEBIAN_TAG    base suite for this arm
+  RCC_ARCH          restrict to one architecture, empty = any
+  RCC_SYSDEPS       apt packages
+  RCC_SYSDEB_URLS   .deb files fetched by URL (for packages no longer in the suite)
+  RCC_APT_PIN       apt preferences content, applied before RCC_SYSDEB_URLS
+  RCC_APT_HOLD      packages to apt-mark hold after install
+  RCC_RCONF_FLAGS   flags passed through build-R to Rconf
+  RCC_LDFLAGS       appended to the configure line
+  RCC_DESC          one line, ends up in the image label
