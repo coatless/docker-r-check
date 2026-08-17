@@ -5,9 +5,27 @@ pass=0; fail=0
 ok(){ pass=$((pass+1)); printf '  \033[32mPASS\033[0m %s\n' "$1"; }
 no(){ fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s\n' "$1"; }
 say(){ printf '\n\033[1m== %s\033[0m\n' "$*"; }
-S="sh /w/docker/flavour-setup.sh"
-export RCC_WIRING=/w/docker/blas-wiring.sh
-D=/w/flavours
+
+# Locate the scripts relative to this file, so the suite runs the same way from
+# a bind mount, a checkout, or a CI container.  RCC_WIRING overrides.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+W="${RCC_WIRING:-$ROOT/docker/blas-wiring.sh}"
+SETUP="${RCC_SETUP:-$ROOT/docker/flavour-setup.sh}"
+FLAVOURS="${RCC_FLAVOURS:-$ROOT/flavours}"
+
+# Abort if the thing under test is missing.  Without this the NEGATIVE cases
+# below pass for the wrong reason -- a missing script "fails" exactly like a
+# script that correctly rejects bad input, and the suite reports green.
+for f in "$W" "$SETUP"; do
+    [ -r "$f" ] || { echo "FATAL: not found: $f" >&2; exit 2; }
+done
+[ -d "$FLAVOURS" ] || { echo "FATAL: no flavours dir: $FLAVOURS" >&2; exit 2; }
+
+S="sh $SETUP"
+export RCC_WIRING="$W"
+D="$FLAVOURS"
+
 apt-get update -qq 2>/dev/null
 apt-get install -y -qq curl ca-certificates binutils >/dev/null 2>&1
 # realistic base: pthread present via libsuperlu-dev's dependency

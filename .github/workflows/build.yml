@@ -110,19 +110,23 @@ jobs:
           TARGET: ${{ github.event.inputs.target || 'base' }}
         run: |
           img="rcc-$TARGET:$TAG"
-          n=$(docker run --rm "$img" sh -c "dpkg-query -f '.\n' -W | wc -l")
-          echo "## contents" >> "$GITHUB_STEP_SUMMARY"
-          echo "**$n** packages installed" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          docker run --rm "$img" sh -c \
-            "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | sort -rn | head -20" \
-            >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          # The two things most likely to be silently missing.
-          echo "### did the AASC fixes take?" >> "$GITHUB_STEP_SUMMARY"
-          docker run --rm "$img" sh -c \
-            "dpkg-query -W -f='rcheckserver \${Version}\n' rcheckserver 2>/dev/null || echo 'rcheckserver ABSENT'" \
-            >> "$GITHUB_STEP_SUMMARY"
-          docker run --rm "$img" sh -c \
-            "dpkg-query -W -f='quarto \${Version}\n' quarto 2>/dev/null || echo 'quarto ABSENT (non-free component missing?)'" \
-            >> "$GITHUB_STEP_SUMMARY"
+          # tee, not >> : a measurement only in the job summary is not in the log,
+          # and the log is what gets quoted later.
+          {
+            echo "## contents"
+            echo "packages installed: $(docker run --rm "$img" sh -c "dpkg-query -f '.\n' -W | wc -l")"
+            echo ""
+            echo "### largest 20"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | sort -rn | head -20"
+            echo ""
+            echo "### did the aasc.sources fixes take?"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -W -f='rcheckserver \${Version}\n' rcheckserver 2>/dev/null || echo 'rcheckserver ABSENT'"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -W -f='quarto \${Version}\n' quarto 2>/dev/null || echo 'quarto ABSENT -- non-free component missing'"
+            echo ""
+            echo "### texlive share"
+            docker run --rm "$img" sh -c \
+              "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | grep -E 'texlive|context' | awk '{s+=\$1; n++} END {printf \"%d packages, %.2f GiB\\n\", n, s/1048576}'"
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
