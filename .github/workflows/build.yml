@@ -241,9 +241,17 @@ jobs:
             exit 1
           fi
 
+          # rc=1 means the PACKAGE was not clean, which is a fact about the
+          # package and not a fault in the image.  The gate is that a check ran
+          # to completion at all, which the Status assertion above covers.
           {
             echo "### R CMD check ($FLAVOUR) -- exit $rc"
             echo '```'
-            grep -E '^\* checking (whether|for|examples|tests|R code|compiled)|^Status|^\* using' check.log | head -40
+            grep -E '^\*|^Status' check.log | head -60
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$rc" -ne 0 ]; then
+            echo "---- full check log ----"
+            cat check.log
+          fi
