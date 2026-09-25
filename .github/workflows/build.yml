@@ -20,6 +20,12 @@ jobs:
   wiring:
     runs-on: ubuntu-24.04
     container: debian:trixie-slim
+    strategy:
+      fail-fast: false
+      matrix:
+        # One container per suite, so neither test sees packages the other
+        # installed.
+        suite: [blas-wiring-test.sh, flavour-test.sh]
     steps:
       - name: tools
         run: |
@@ -29,18 +35,13 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: lint
+        if: matrix.suite == 'blas-wiring-test.sh'
         run: |
           sh tests/lint-flavours.sh
           shellcheck -S warning docker/blas-wiring.sh docker/flavour-setup.sh
 
-      - name: blas wiring
-        run: bash tests/blas-wiring-test.sh
-
-      - name: flavours
-        run: |
-          # pthread OpenBLAS is installed, as it is in the real base.
-          apt-get install -y -qq libsuperlu-dev
-          bash tests/flavour-test.sh
+      - name: ${{ matrix.suite }}
+        run: bash tests/${{ matrix.suite }}
 
   # Build the base image and record how much disk it uses.
   base:
@@ -143,7 +144,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavour: [reference, openblas]
+        flavour: [reference, openblas, atlas]
     steps:
       - uses: actions/checkout@v5
 

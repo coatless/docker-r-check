@@ -27,8 +27,9 @@ D="$FLAVOURS"
 
 apt-get update -qq 2>/dev/null
 apt-get install -y -qq curl ca-certificates binutils >/dev/null 2>&1
-# Same starting point as the real base, with pthread OpenBLAS present.
-apt-get install -y -qq libsuperlu-dev >/dev/null 2>&1
+# Same starting point as the real base, with pthread OpenBLAS and with
+# liblapacke-dev, which rcheckserver depends on and which breaks ATLAS.
+apt-get install -y -qq libsuperlu-dev liblapacke-dev >/dev/null 2>&1
 echo "  base pulled in: $(dpkg -l 'libopenblas0*' 2>/dev/null | awk '/^ii/{print $2}' | tr '\n' ' ')"
 
 say "F1 reference"
@@ -50,6 +51,8 @@ r=$(readlink -f /usr/lib/x86_64-linux-gnu/liblapack.so.3); case "$r" in */atlas/
 v=$(dpkg-query -W -f='${Version}' libatlas3-base 2>/dev/null)
 [ "$v" = "3.10.3-13" ] && ok "real ATLAS installed ($v)" || no "got version '$v'"
 apt-mark showhold | grep -q libatlas3-base && ok "held" || no "not held"
+dpkg-query -W -f='${Status}' liblapacke 2>/dev/null | grep -q ' installed$' \
+  && no "liblapacke still installed" || ok "liblapacke removed (it Breaks this ATLAS)"
 
 say "F4 the pin survives an upgrade attempt"
 apt-get update -qq 2>/dev/null
