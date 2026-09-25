@@ -21,4 +21,4 @@ if [ ! -e build ]; then
     mkdir -p build
 fi
 
-docker run --rm -v $(pwd)/build:/build "rchk-build-r:${DEBIAN_TAG}-${FLAVOR_TAG}" "$@"
+docker run --platform linux/amd64 --rm -v $(pwd)/build:/build "rchk-build-r:${DEBIAN_TAG}-${FLAVOR_TAG}" "$@"
