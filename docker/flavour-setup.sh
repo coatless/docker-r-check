@@ -5,7 +5,7 @@
 #
 # Reads flavours/<flavour>.env (see flavours/README) and, in this order:
 #   1. writes the apt preferences the arm needs
-#   2. installs RCC_SYSDEPS from apt
+#   2. installs RCC_SYSDEPS from apt, and removes RCC_APT_REMOVE if installed
 #   3. fetches RCC_SYSDEB_URLS, checks them against RCC_SYSDEB_SHA256, dpkg -i
 #   4. apt-mark holds RCC_APT_HOLD
 #   5. runs blas-wiring.sh apply, which also verifies
@@ -28,7 +28,7 @@ ENVFILE="$FLAVOURS_DIR/$FLAVOUR.env"
 . "$ENVFILE"
 
 : "${RCC_ARCH:=}" "${RCC_SYSDEPS:=}" "${RCC_SYSDEB_URLS:=}" "${RCC_SYSDEB_SHA256:=}"
-: "${RCC_APT_PIN:=}" "${RCC_APT_HOLD:=}" "${RCC_DESC:=}"
+: "${RCC_APT_PIN:=}" "${RCC_APT_HOLD:=}" "${RCC_APT_REMOVE:=}" "${RCC_DESC:=}"
 
 export DEBIAN_FRONTEND=noninteractive
 HOST_ARCH="$(dpkg --print-architecture)"
@@ -56,6 +56,19 @@ if [ -n "$RCC_SYSDEPS" ]; then
     # Word splitting is intended. This is a package list.
     # shellcheck disable=SC2086
     apt-get install -y -qq $RCC_SYSDEPS
+fi
+# Remove only what is installed. apt-get remove fails on a package it does
+# not know, and a bare base lacks some of these.
+removed=""
+if [ -n "$RCC_APT_REMOVE" ]; then
+    # shellcheck disable=SC2086
+    removed="$(dpkg-query -W -f='${Package} ${Status}\n' $RCC_APT_REMOVE 2>/dev/null |
+        awk '$NF == "installed" {print $1}' | tr '\n' ' ')"
+    if [ -n "$removed" ]; then
+        echo "  apt remove: $removed"
+        # shellcheck disable=SC2086
+        apt-get remove -y -qq $removed
+    fi
 fi
 
 # --- 3. .debs fetched by URL ----------------------------------------------
@@ -107,6 +120,7 @@ install -d /etc/rcheck
     echo "arch: $HOST_ARCH"
     echo "rconf_flags: ${RCC_RCONF_FLAGS:-}"
     echo "sysdeps: $RCC_SYSDEPS"
+    echo "removed: $removed"
     echo "sysdeb_urls: $RCC_SYSDEB_URLS"
     echo "--- resolved libraries ---"
     sh "$WIRING" show
