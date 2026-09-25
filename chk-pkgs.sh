@@ -34,4 +34,4 @@ fi
 
 MAKEFLAGS=${MAKEFLAGS-"-j2"}
 
-docker run --rm -v $(pwd)/build:/build $pkgmount -e "MAKEFLAGS=$MAKEFLAGS" "rchk-pkgcheck:${DEBIAN_TAG}-${FLAVOR_TAG}" "$@"
+docker run --platform linux/amd64 --rm -v $(pwd)/build:/build $pkgmount -e "MAKEFLAGS=$MAKEFLAGS" "rchk-pkgcheck:${DEBIAN_TAG}-${FLAVOR_TAG}" "$@"

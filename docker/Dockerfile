@@ -31,6 +31,16 @@ RUN sed -i 's/^Types: deb/\0 deb-src/g' /etc/apt/sources.list.d/debian.sources &
 RUN DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y install locales && \
     echo 'C.UTF-8 UTF-8~en_US.UTF-8 UTF-8' | tr '~' '\n' > /etc/locale.gen  && locale-gen
 
+## rcheckserver installs on arm64 too, but without quarto and openbugs, which
+## exist only for amd64. Stop unless a non-amd64 base was asked for.
+ARG ALLOW_NON_AMD64=
+RUN arch="$(dpkg --print-architecture)"; \
+    if [ "$arch" != amd64 ] && [ -z "${ALLOW_NON_AMD64}" ]; then \
+        echo "** ERROR: this base is $arch; build with --platform linux/amd64" >&2; \
+        echo "   (or --build-arg ALLOW_NON_AMD64=1 for a base without quarto and openbugs)" >&2; \
+        exit 1; \
+    fi
+
 
 ## Target: build-r - image for building R, caches R sources and QA/Kurt
 FROM base AS build-r
@@ -45,7 +55,7 @@ ARG UID=1000
 ARG GID=1000
 
 ## setup a build user + sudo
-RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y install sudo && /sbin/groupadd -g ${GID} rbuild && /sbin/useradd -m -u ${UID} -g ${GID} rbuild && echo 'rbuild ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/10rbuild
+RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y install sudo && /sbin/groupadd -o -g ${GID} rbuild && /sbin/useradd -m -u ${UID} -g ${GID} rbuild && echo 'rbuild ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/10rbuild
 
 ## SVN revisions to check out. Empty means trunk HEAD, so set both for a
 ## build that should be repeatable.
@@ -126,6 +136,7 @@ RUN set -eu; \
       echo "r_svn_rev: $(cat /etc/rcheck-r-svn-rev 2>/dev/null || echo unknown)"; \
       echo "qa_svn_rev: $(cat /etc/rcheck-qa-svn-rev 2>/dev/null || echo unknown)"; \
       echo "debian: $(. /etc/os-release; echo "$VERSION_CODENAME")"; \
+      echo "arch: $(dpkg --print-architecture)"; \
       echo "glibc: $(ldd --version | head -n1)"; \
       cat /etc/rcheck/r-blas.txt 2>/dev/null || true; \
     } > /etc/rcheck/manifest.txt; \
