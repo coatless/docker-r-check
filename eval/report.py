@@ -15,10 +15,11 @@ import sys
 
 HEADING = re.compile(r"^\* (checking .*?) \.\.\.(.*)$")
 RESULT = re.compile(r"(?:\[[^\]]*\]\s*)?(OK|NOTE|WARNING|ERROR)\s*$")
-QUOTED = re.compile(r"\s*‘[^’]*’")
-MISSING = re.compile(r"Packages? (?:required|suggested) but not available:?((?:\s*‘[^’]+’,?)+)")
-COMPARING = re.compile(r"^\s*Comparing ‘([^’]+)’ to ‘[^’]+’ \.\.\.(.*)$")
-FAILED = re.compile(r"^Running the tests in ‘tests/([^’]+)’ failed")
+# R quotes names with ‘’ in a UTF-8 locale and with '' otherwise.
+QUOTED = re.compile(r"\s*[‘'][^’']*[’']")
+MISSING = re.compile(r"Packages? (?:required|suggested) but not available:?((?:\s*[‘'][^’']+[’'],?)+)")
+COMPARING = re.compile(r"^\s*Comparing [‘']([^’']+)[’'] to [‘'][^’']+[’'] \.\.\.(.*)$")
+FAILED = re.compile(r"^Running the tests in [‘']tests/([^’']+)[’'] failed")
 
 
 def problems(path):
@@ -68,7 +69,7 @@ def problems(path):
         for f in dict.fromkeys(files):
             found[f"tests {f}"] = result
     if "package dependencies" in found:
-        names = sorted({n for m in MISSING.finditer(text) for n in re.findall(r"‘([^’]+)’", m.group(1))})
+        names = sorted({n for m in MISSING.finditer(text) for n in re.findall(r"[‘']([^’']+)[’']", m.group(1))})
         if names:
             found["package dependencies"] += " (needs " + ", ".join(names) + ")"
     return found
@@ -122,14 +123,16 @@ def verdict(cran, arm, ref):
     c, a = set(cran), set(arm["problems"])
     if not a:
         v = "not reproduced"
-    elif a == c:
+    elif arm["problems"] == cran:
         v = "reproduced"
+    elif a == c:
+        v = "same step, different result"
     elif c & a:
         v = "partly reproduced"
     else:
         v = "different problem"
     if ref is not None and a:
-        shared = a & set(ref["problems"])
+        shared = {k for k in a if ref["problems"].get(k) == arm["problems"][k]}
         if shared == a:
             v += ", all of it also in reference"
         elif shared:
@@ -166,7 +169,7 @@ def main(oracle, results):
         for label in variants:
             a = ours(results, label, pkg)
             v = verdict(cran, a, ref)
-            tally.setdefault(label, {}).setdefault(v.split(",")[0], []).append(pkg)
+            tally.setdefault(label, {}).setdefault(re.split(", (?:all|part) of it", v)[0], []).append(pkg)
             if a and t["Version"] not in a["tarball"]:
                 issues.append(f"{pkg}: CRAN checked {t['Version']}, {label} checked {a['tarball']}")
             out.append(f"| {pkg} {t['Version']} | {t['kind']} | {label} | {short(cran)} | "

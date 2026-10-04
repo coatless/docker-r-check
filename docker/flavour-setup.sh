@@ -9,6 +9,7 @@
 #   3. fetches RCC_SYSDEB_URLS, checks them against RCC_SYSDEB_SHA256, dpkg -i
 #   4. apt-mark holds RCC_APT_HOLD
 #   5. runs blas-wiring.sh apply, which also verifies
+#   6. writes RCC_CHECK_ENV to /etc/rcheck/check.env for entry-pkgcheck.sh
 #
 # The order matters for ATLAS. libgfortran5 has to be installed before
 # dpkg -i, and the pin keeps a later apt run from replacing ATLAS 3.10.3-13
@@ -29,7 +30,7 @@ ENVFILE="$FLAVOURS_DIR/$FLAVOUR.env"
 
 : "${RCC_ARCH:=}" "${RCC_SYSDEPS:=}" "${RCC_SYSDEB_URLS:=}" "${RCC_SYSDEB_SHA256:=}"
 : "${RCC_APT_PIN:=}" "${RCC_APT_HOLD:=}" "${RCC_APT_REMOVE:=}" "${RCC_DESC:=}"
-: "${RCC_APT_SOURCE:=}" "${RCC_APT_KEY:=}"
+: "${RCC_APT_SOURCE:=}" "${RCC_APT_KEY:=}" "${RCC_CHECK_ENV:=}"
 
 export DEBIAN_FRONTEND=noninteractive
 HOST_ARCH="$(dpkg --print-architecture)"
@@ -125,6 +126,11 @@ sh "$WIRING" apply "$FLAVOUR"
 
 # --- 6. record what was installed -----------------------------------------
 install -d /etc/rcheck
+if [ -n "$RCC_CHECK_ENV" ]; then
+    printf '%s\n' "$RCC_CHECK_ENV" | tr '|' '\n' > /etc/rcheck/check.env
+    echo "  check environment:"
+    sed 's/^/    /' /etc/rcheck/check.env
+fi
 {
     echo "flavour: $FLAVOUR"
     echo "desc: $RCC_DESC"
