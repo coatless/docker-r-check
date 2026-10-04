@@ -19,6 +19,8 @@ env:
   # CRAN issue kinds to run. The arms are chosen from the kinds that have
   # packages listed today.
   KINDS: BLIS
+  # Limit a run to these job labels. Empty runs every job.
+  ONLY: blis-fedora-haswell blis-2.0-skx
   # Small packages of different kinds: C, more C, Fortran, C calling the
   # BLAS, saved test output that depends on the BLAS, and knitr vignettes.
   OTHER_PACKAGES: base64enc digest quadprog irlba maxLik jsonlite
@@ -81,14 +83,14 @@ jobs:
         id: arms
         run: |
           python3 - <<'EOF' | tee -a "$GITHUB_OUTPUT"
-          import csv, json, math
+          import csv, json, math, os
           count = {}
           for row in csv.DictReader(open("oracle/targets.tsv"), delimiter="\t"):
               count[row["arm"]] = count.get(row["arm"], 0) + 1
           jobs = [{"arm": "reference", "targets": "reference", "label": "reference", "shard": 1, "shards": 1}]
           for arm in sorted(count):
-              # A long list is split over several jobs of about 17 packages.
-              shards = min(6, math.ceil(count[arm] / 17))
+              # A long list is split over several jobs of about 10 packages.
+              shards = min(10, math.ceil(count[arm] / 10))
               jobs += [{"arm": arm, "targets": arm, "label": arm, "shard": s, "shards": shards}
                        for s in range(1, shards + 1)]
               if arm == "blis":
@@ -103,6 +105,8 @@ jobs:
                   jobs += [{"arm": a, "targets": "blis", "label": f"{label}-{k}", "blis_arch": k,
                             "shard": 1, "shards": 1}
                            for a, label in builds for k in ("haswell", "skx")]
+          only = os.environ.get("ONLY", "").split()
+          jobs = [j for j in jobs if not only or j["label"] in only]
           print("matrix=" + json.dumps({"include": jobs}))
           EOF
 
@@ -140,7 +144,8 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost /usr/local/lib/node_modules \
-                      /opt/hostedtoolcache/CodeQL || true
+                      /opt/hostedtoolcache /usr/share/swift /usr/local/.ghcup \
+                      /usr/local/share/powershell /usr/lib/jvm /opt/az /opt/microsoft || true
           sudo docker image prune -af || true
           df -h /
 
@@ -178,6 +183,9 @@ jobs:
           CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
           RCC_MODE: regular
           OPENBLAS_CORETYPE: Haswell
+          # One hour for any one step of a check, so a test that hangs does
+          # not use up the job.
+          _R_CHECK_ELAPSED_TIMEOUT_: 3600
         run: |
           # reference is the control for every BLAS issue, and for the clang23
           # packages that fail to install at CRAN.

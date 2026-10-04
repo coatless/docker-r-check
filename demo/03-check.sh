@@ -24,6 +24,8 @@
 #                        makes two runs install the same versions.
 #   OPENBLAS_CORETYPE    pins the OpenBLAS kernel.
 #   BLIS_ARCH_TYPE       pins the BLIS kernel set, for example haswell.
+#   _R_CHECK_*           any R CMD check setting in the environment is passed
+#                        on, for example _R_CHECK_ELAPSED_TIMEOUT_=3600.
 #   RCC_LIBRARY_CACHE=1  keeps installed dependencies in a named volume per
 #                        image and mirror, so the next run skips compiling
 #                        them. List the volumes with
@@ -89,6 +91,8 @@ env_args=()
 [ -n "${OPENBLAS_CORETYPE:-}" ] && env_args+=(-e "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE")
 [ -n "${BLIS_ARCH_TYPE:-}" ] && env_args+=(-e "BLIS_ARCH_TYPE=$BLIS_ARCH_TYPE")
 [ -n "${MAKEFLAGS:-}" ] && env_args+=(-e "MAKEFLAGS=$MAKEFLAGS")
+# R CMD check settings such as _R_CHECK_ELAPSED_TIMEOUT_ pass straight through.
+for v in $(env | sed -n 's/^\(_R_CHECK_[A-Z0-9_]*\)=.*/\1/p'); do env_args+=(-e "$v"); done
 
 # Rootless Podman on an SELinux host cannot read an unlabeled bind mount.
 pkg_mount="$stage:/pkg:ro"
