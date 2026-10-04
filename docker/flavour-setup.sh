@@ -4,7 +4,7 @@
 #   flavour-setup.sh <flavour> [flavours-dir]
 #
 # Reads flavours/<flavour>.env (see flavours/README) and, in this order:
-#   1. writes the apt preferences the arm needs
+#   1. writes the apt source, signing key and preferences the arm needs
 #   2. installs RCC_SYSDEPS from apt, and removes RCC_APT_REMOVE if installed
 #   3. fetches RCC_SYSDEB_URLS, checks them against RCC_SYSDEB_SHA256, dpkg -i
 #   4. apt-mark holds RCC_APT_HOLD
@@ -29,6 +29,7 @@ ENVFILE="$FLAVOURS_DIR/$FLAVOUR.env"
 
 : "${RCC_ARCH:=}" "${RCC_SYSDEPS:=}" "${RCC_SYSDEB_URLS:=}" "${RCC_SYSDEB_SHA256:=}"
 : "${RCC_APT_PIN:=}" "${RCC_APT_HOLD:=}" "${RCC_APT_REMOVE:=}" "${RCC_DESC:=}"
+: "${RCC_APT_SOURCE:=}" "${RCC_APT_KEY:=}"
 
 export DEBIAN_FRONTEND=noninteractive
 HOST_ARCH="$(dpkg --print-architecture)"
@@ -42,7 +43,17 @@ if [ -n "$RCC_ARCH" ] && [ "$RCC_ARCH" != "$HOST_ARCH" ]; then
     exit 1
 fi
 
-# --- 1. apt preferences, before anything is installed ----------------------
+# --- 1. apt source, key and preferences, before anything is installed -----
+if [ -n "$RCC_APT_KEY" ]; then
+    echo "  key: /etc/apt/keyrings/$RCC_APT_KEY"
+    install -d /etc/apt/keyrings
+    install -m 0644 "$FLAVOURS_DIR/$RCC_APT_KEY" "/etc/apt/keyrings/$RCC_APT_KEY"
+fi
+if [ -n "$RCC_APT_SOURCE" ]; then
+    echo "  writing /etc/apt/sources.list.d/rcc-$FLAVOUR.sources"
+    printf '%s\n' "$RCC_APT_SOURCE" | tr '|' '\n' > "/etc/apt/sources.list.d/rcc-$FLAVOUR.sources"
+    sed 's/^/    /' "/etc/apt/sources.list.d/rcc-$FLAVOUR.sources"
+fi
 if [ -n "$RCC_APT_PIN" ]; then
     echo "  writing /etc/apt/preferences.d/rcc-$FLAVOUR"
     printf '%s\n' "$RCC_APT_PIN" | tr '|' '\n' > "/etc/apt/preferences.d/rcc-$FLAVOUR"
@@ -119,6 +130,7 @@ install -d /etc/rcheck
     echo "desc: $RCC_DESC"
     echo "arch: $HOST_ARCH"
     echo "rconf_flags: ${RCC_RCONF_FLAGS:-}"
+    echo "apt_source: $(printf '%s' "$RCC_APT_SOURCE" | sed -n 's/.*URIs: \([^|]*\).*/\1/p')"
     echo "sysdeps: $RCC_SYSDEPS"
     echo "removed: $removed"
     echo "sysdeb_urls: $RCC_SYSDEB_URLS"

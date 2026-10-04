@@ -29,7 +29,7 @@ apt-get update -qq 2>/dev/null
 # -lopenblas test uses the link-time alternatives, which pthread also wins.
 apt-get install -y -qq libopenblas0-serial libopenblas-serial-dev \
   libopenblas0-pthread libopenblas-pthread-dev \
-  libblas3 liblapack3 libgfortran5 curl >/dev/null 2>&1
+  libblas3 liblapack3 liblapack-dev libgfortran5 curl >/dev/null 2>&1
 
 say "state before any wiring (pthread wins on priority)"
 sh $W show | sed 's/^/  /'
@@ -96,6 +96,15 @@ if sh $W verify atlas >/dev/null 2>&1; then
 else
   ok "verify caught the split pairing"
 fi
+
+say "T8  blis: BLIS for the BLAS, the reference LAPACK on top"
+apt-get install -y -qq libblis4-serial libblis-serial-dev >/dev/null 2>&1
+if sh $W apply blis >/dev/null 2>&1; then ok "apply blis exited 0"; else no "apply blis nonzero"; fi
+r=$(readlink -f /usr/lib/x86_64-linux-gnu/libblas.so.3)
+case "$r" in */blis-serial/*) ok "libblas.so.3 -> blis ($r)";; *) no "libblas.so.3 -> $r";; esac
+r=$(readlink -f /usr/lib/x86_64-linux-gnu/liblapack.so.3)
+case "$r" in */lapack/*) ok "liblapack.so.3 -> reference";; *) no "liblapack.so.3 -> $r";; esac
+if sh $W verify blis >/dev/null 2>&1; then ok "verify blis -> 0"; else no "verify blis nonzero"; fi
 
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

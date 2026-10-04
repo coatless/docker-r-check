@@ -74,5 +74,24 @@ if $S openblas /tmp/bad >/tmp/o6 2>&1; then no "built an arm for the wrong arch"
   grep -q 'riscv64-only' /tmp/o6 && ok "arch gate fired" || { no "failed for another reason"; tail -4 /tmp/o6|sed 's/^/    /'; }
 fi
 
+say "F7 blis (forky's BLIS 2.1 by URL + checksum + hold, reference LAPACK)"
+if $S blis "$D" >/tmp/o7 2>&1; then ok "setup exited 0"; else no "setup failed"; tail -25 /tmp/o7|sed 's/^/    /'; fi
+grep -q 'sha256 ok' /tmp/o7 && ok "checksums verified" || no "no checksum verification"
+r=$(readlink -f /usr/lib/x86_64-linux-gnu/libblas.so.3);   case "$r" in */blis-serial/*) ok "blas -> blis";; *) no "blas -> $r";; esac
+r=$(readlink -f /usr/lib/x86_64-linux-gnu/liblapack.so.3); case "$r" in */lapack/*) ok "lapack -> reference";; *) no "lapack -> $r";; esac
+v=$(dpkg-query -W -f='${Version}' libblis4-serial 2>/dev/null)
+[ "$v" = "2.1-1" ] && ok "BLIS 2.1-1 installed" || no "got version '$v'"
+apt-mark showhold | grep -q libblis4-serial && ok "held" || no "not held"
+
+say "F8 mkl (Intel's apt repository and signing key)"
+if $S mkl "$D" >/tmp/o8 2>&1; then ok "setup exited 0"; else no "setup failed"; tail -25 /tmp/o8|sed 's/^/    /'; fi
+[ -s /etc/apt/sources.list.d/rcc-mkl.sources ] && ok "apt source written" || no "no apt source"
+for l in libmkl_gf_lp64.so libmkl_core.so libmkl_sequential.so; do
+  [ -e "/opt/intel/oneapi/mkl/2026.1/lib/$l" ] && ok "$l present" || no "$l missing"
+done
+[ -d /opt/intel/oneapi/mkl/2026.1/share/doc/mkl/licensing ] && ok "MKL license files present" || no "no MKL license files"
+r=$(readlink -f /usr/lib/x86_64-linux-gnu/libblas.so.3); case "$r" in */blas/*) ok "alternatives back on reference";; *) no "blas -> $r";; esac
+grep -q 'flavour: mkl' /etc/rcheck/flavour.txt && ok "manifest written" || no "no manifest"
+
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

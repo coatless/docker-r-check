@@ -50,6 +50,15 @@ flavour_spec() {
             "libblas.so-$MA|$L/atlas/libblas.so" \
             "liblapack.so-$MA|$L/atlas/liblapack.so"
         ;;
+    blis)
+        # BLIS supplies the BLAS. Debian's reference LAPACK runs on top of it,
+        # as the system LAPACK does in CRAN's BLIS checks.
+        printf '%s\n' \
+            "libblas.so.3-$MA|$L/blis-serial/libblas.so.3" \
+            "liblapack.so.3-$MA|$L/lapack/liblapack.so.3" \
+            "libblas.so-$MA|$L/blis-serial/libblas.so" \
+            "liblapack.so-$MA|$L/lapack/liblapack.so"
+        ;;
     mkl|clang23)
         # MKL is linked by path and does not use alternatives. clang23 uses
         # R's own BLAS. Both keep the reference selection.
@@ -73,6 +82,7 @@ expected_fragment() {
     reference) echo "libRblas.so" ;;
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
+    blis)      echo "/blis-serial/" ;;
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;
     clang23)   echo "" ;;   # internal reference BLAS; nothing external to match
     *)         echo "" ;;

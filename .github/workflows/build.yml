@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [debian-blas-arms]
+    branches: [debian-blas-arms, more-arms]
   workflow_dispatch:
     inputs:
       debian_tag:
@@ -134,7 +134,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavour: [reference, openblas, atlas]
+        flavour: [reference, openblas, atlas, mkl, blis]
     steps:
       - uses: actions/checkout@v5
 
