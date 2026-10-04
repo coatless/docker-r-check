@@ -84,7 +84,7 @@ expected_fragment() {
     atlas)     echo "/atlas/" ;;
     blis)      echo "/blis-serial/" ;;
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;
-    clang23)   echo "" ;;   # internal reference BLAS; nothing external to match
+    clang23)   echo "libRblas.so" ;;
     *)         echo "" ;;
     esac
 }

@@ -132,6 +132,8 @@ install -d /etc/rcheck
     echo "rconf_flags: ${RCC_RCONF_FLAGS:-}"
     echo "apt_source: $(printf '%s' "$RCC_APT_SOURCE" | sed -n 's/.*URIs: \([^|]*\).*/\1/p')"
     echo "sysdeps: $RCC_SYSDEPS"
+    # shellcheck disable=SC2046,SC2086
+    echo "sysdep_versions: $(dpkg-query -W -f='${Package}=${Version} ' $(printf '%s\n' $RCC_SYSDEPS | sed 's/=.*//') 2>/dev/null)"
     echo "removed: $removed"
     echo "sysdeb_urls: $RCC_SYSDEB_URLS"
     echo "--- resolved libraries ---"

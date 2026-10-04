@@ -12,3 +12,6 @@ One file per arm, sourced by docker/flavour-setup.sh inside the image.
   RCC_RCONF_FLAGS   flags passed through build-R to Rconf
   RCC_LDFLAGS       appended to the configure line
   RCC_DESC          one-line description, written to /etc/rcheck/flavour.txt
+
+An arm can also export variables that Rconf reads from the environment, as
+clang23.env does with CXX_STDLIB.
