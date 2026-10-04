@@ -1,9 +1,10 @@
 name: evaluate
 
-# Check CRAN's current BLAS issues in the arm that matches each one, with the
-# reference arm as the control, plus a fixed set of other packages in every
-# arm. All arms use the same R and QA revisions and the same dated CRAN
-# snapshot, and the report compares the results with CRAN's own logs.
+# Check CRAN's current BLAS and clang23 issues in the arm that matches each
+# one, with the reference arm as the control, plus a fixed set of other
+# packages in every arm. All arms use the same R and QA revisions and the
+# same dated CRAN snapshot, and the report compares the results with CRAN's
+# own logs.
 
 on:
   push:
@@ -15,6 +16,9 @@ permissions:
   contents: read
 
 env:
+  # CRAN issue kinds to run. The arms are chosen from the kinds that have
+  # packages listed today.
+  KINDS: clang23
   # Small packages of different kinds: C, more C, Fortran, C calling the
   # BLAS, saved test output that depends on the BLAS, and knitr vignettes.
   OTHER_PACKAGES: base64enc digest quadprog irlba maxLik jsonlite
@@ -26,6 +30,7 @@ jobs:
       r_rev: ${{ steps.pin.outputs.r_rev }}
       qa_rev: ${{ steps.pin.outputs.qa_rev }}
       snapshot: ${{ steps.pin.outputs.snapshot }}
+      matrix: ${{ steps.arms.outputs.matrix }}
     steps:
       - uses: actions/checkout@v5
 
@@ -42,7 +47,7 @@ jobs:
             echo "snapshot=$snapshot"
           } | tee -a "$GITHUB_OUTPUT"
 
-      - name: save CRAN's current BLAS issues and their logs
+      - name: save CRAN's current issues and their logs
         env:
           R_REV: ${{ steps.pin.outputs.r_rev }}
           QA_REV: ${{ steps.pin.outputs.qa_rev }}
@@ -53,10 +58,14 @@ jobs:
           cd oracle
           curl -fsSL -D rds.headers -o check_issues.rds https://cran.r-project.org/web/checks/check_issues.rds
           curl -fsSL -o README.txt https://www.stats.ox.ac.uk/pub/bdr/Rblas/README.txt
-          docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/w" -w /w/oracle \
+          docker run --rm --user "$(id -u):$(id -g)" -e KINDS -v "$GITHUB_WORKSPACE:/w" -w /w/oracle \
             docker.io/library/r-base:latest Rscript /w/eval/targets.R
-          tail -n +2 targets.tsv | while IFS=$'\t' read -r pkg _ kind href _ log; do
+          tail -n +2 targets.tsv | while IFS=$'\t' read -r pkg _ kind href _ log install; do
             curl -fsSL -o "$log" "$href" || echo "could not fetch $href ($pkg, $kind)"
+            if [ "$install" != - ]; then
+              curl -fsSL --max-filesize 3000000 -o "${log%.out}.install.log" "$install" ||
+                echo "did not keep $install (too large or missing)"
+            fi
           done
           {
             echo "R-revision: $R_REV"
@@ -66,7 +75,23 @@ jobs:
             echo "Fetched: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > run.txt
           cat run.txt
-          column -t -s $'\t' targets.tsv | cut -c1-120
+          cut -f1-3,5 targets.tsv | column -t -s $'\t' 
+
+      - name: choose the arms
+        id: arms
+        run: |
+          python3 - <<'EOF' | tee -a "$GITHUB_OUTPUT"
+          import csv, json, math
+          count = {}
+          for row in csv.DictReader(open("oracle/targets.tsv"), delimiter="\t"):
+              count[row["arm"]] = count.get(row["arm"], 0) + 1
+          jobs = [{"arm": "reference", "shard": 1, "shards": 1}]
+          for arm in sorted(count):
+              # A long list is split over several jobs of about 17 packages.
+              shards = min(6, math.ceil(count[arm] / 17))
+              jobs += [{"arm": arm, "shard": s, "shards": shards} for s in range(1, shards + 1)]
+          print("matrix=" + json.dumps({"include": jobs}))
+          EOF
 
       - uses: actions/upload-artifact@v4
         with:
@@ -79,10 +104,11 @@ jobs:
     timeout-minutes: 350
     strategy:
       fail-fast: false
-      matrix:
-        arm: [reference, openblas, mkl, blis, atlas]
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
     env:
       ARM: ${{ matrix.arm }}
+      SHARD: ${{ matrix.shard }}
+      SHARDS: ${{ matrix.shards }}
       R_REV: ${{ needs.targets.outputs.r_rev }}
       QA_REV: ${{ needs.targets.outputs.qa_rev }}
       SNAPSHOT: ${{ needs.targets.outputs.snapshot }}
@@ -115,7 +141,10 @@ jobs:
             tail -n 20 build.log > "out/$ARM/BUILD-FAILED"
             exit 1
           fi
-          docker run --rm --entrypoint cat "rcc-standalone:$ARM" /etc/rcheck/manifest.txt | tee "out/$ARM/manifest.txt"
+          {
+            docker run --rm --entrypoint cat "rcc-standalone:$ARM" /etc/rcheck/manifest.txt
+            echo "cxx: $(docker run --rm --entrypoint /build/bin/R "rcc-standalone:$ARM" CMD config CXX)"
+          } | tee "out/$ARM/manifest.txt"
 
       - name: check the packages
         env:
@@ -124,23 +153,37 @@ jobs:
           OPENBLAS_CORETYPE: Haswell
           MAKEFLAGS: -j4
         run: |
-          # shellcheck disable=SC2086 # the package lists are split on purpose
-          if [ "$ARM" = reference ]; then
-            targets=$(tail -n +2 oracle/targets.tsv | cut -f1)
-          else
-            targets=$(tail -n +2 oracle/targets.tsv | awk -F'\t' -v a="$ARM" '$5 == a {print $1}')
-          fi
+          # reference is the control for every BLAS issue, and for the clang23
+          # packages that fail to install at CRAN.
+          case "$ARM" in
+          reference)
+            targets=$(tail -n +2 oracle/targets.tsv | awk -F'\t' '$5 != "clang23" || $7 != "-" {print $1}') ;;
+          *)
+            targets=$(tail -n +2 oracle/targets.tsv |
+              awk -F'\t' -v a="$ARM" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1}') ;;
+          esac
+          [ "$SHARD" = 1 ] || OTHER_PACKAGES=""
           curl -fsSL -o PACKAGES "$CRAN_MIRROR/src/contrib/PACKAGES"
           pkgs=""
+          # The package lists are split on purpose here and below.
+          # shellcheck disable=SC2086
           for p in $(printf '%s\n' $targets $OTHER_PACKAGES | awk '!seen[$0]++'); do
             if grep -qx "Package: $p" PACKAGES; then
               pkgs="$pkgs $p"
             else
-              echo "$p is not in the $SNAPSHOT snapshot, so it was not checked" | tee -a "out/$ARM/SKIPPED"
+              echo "$p is not in the $SNAPSHOT snapshot, so it was not checked" | tee -a "out/$ARM/SKIPPED-$SHARD"
             fi
           done
           echo "checking in $ARM:$pkgs"
+          # Stop the container before the job's time limit, so that the results
+          # of the packages it finished are still collected.
+          ( sleep $((285 * 60))
+            echo "time limit reached, stopping the check container" | tee -a "out/$ARM/SKIPPED-$SHARD"
+            docker ps -q --filter name=rcc-check- | xargs -r docker stop -t 10 ) &
+          watchdog=$!
+          # shellcheck disable=SC2086
           demo/03-check.sh "$ARM" $pkgs || echo "03-check.sh exited $?"
+          kill "$watchdog" 2>/dev/null || true
 
       - name: keep the logs
         if: always()
@@ -164,7 +207,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: results-${{ matrix.arm }}
+          name: results-${{ matrix.arm }}-${{ matrix.shard }}
           path: out/
 
   report:

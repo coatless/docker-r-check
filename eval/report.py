@@ -12,23 +12,32 @@ import os
 import re
 import sys
 
-ARMS = ["reference", "openblas", "mkl", "blis", "atlas"]
+ARMS = ["reference", "openblas", "mkl", "blis", "atlas", "clang23"]
 HEADING = re.compile(r"^\* (checking .*?) \.\.\.(.*)$")
 RESULT = re.compile(r"(?:\[[^\]]*\]\s*)?(OK|NOTE|WARNING|ERROR)\s*$")
-RANK = {"OK": 0, "NOTE": 1, "WARNING": 2, "ERROR": 3}
+QUOTED = re.compile(r"\s*‘[^’]*’")
+MISSING = re.compile(r"Packages? (?:required|suggested) but not available:?((?:\s*‘[^’]+’,?)+)")
 
 
 def problems(path):
-    """Map each check step that did not end OK to its result."""
+    """Map each check step that did not end OK to its result.
+
+    Package names are dropped from the step names so that two logs can be
+    compared. An install log, which has no check steps, counts as a failed
+    install. Missing dependencies are named in the result.
+    """
     found, current = {}, None
     try:
-        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+        text = open(path, encoding="utf-8", errors="replace").read()
     except OSError:
         return None
+    lines = text.splitlines()
+    if lines and lines[0].startswith("* installing *source* package"):
+        return {"checking whether package can be installed": "ERROR"}
     for line in lines:
         h = HEADING.match(line)
         if h:
-            current = re.sub(r"\s+\[[^\]]*\]$", "", h.group(1))
+            current = QUOTED.sub("", re.sub(r"\s+\[[^\]]*\]$", "", h.group(1)))
             m = RESULT.search(h.group(2))
             if m:
                 if m.group(1) != "OK":
@@ -43,7 +52,22 @@ def problems(path):
                 if m.group(1) != "OK":
                     found[current] = m.group(1)
                 current = None
+    if "checking package dependencies" in found:
+        names = sorted({n for m in MISSING.finditer(text) for n in re.findall(r"‘([^’]+)’", m.group(1))})
+        if names:
+            found["checking package dependencies"] += " (needs " + ", ".join(names) + ")"
     return found
+
+
+def first_error(path):
+    """The first compiler error in an install log, or None."""
+    try:
+        for line in open(path, encoding="utf-8", errors="replace"):
+            if re.search(r"\berror:", line):
+                return line.strip()[:160]
+    except OSError:
+        pass
+    return None
 
 
 def status(path):
@@ -123,10 +147,10 @@ def main(oracle, results):
     out.append("")
 
     targets = list(csv.DictReader(open(os.path.join(oracle, "targets.tsv")), delimiter="\t"))
-    out.append("## CRAN's current BLAS issues\n")
+    out.append("## CRAN's current BLAS and clang23 issues\n")
     out.append("| Package | Kind | CRAN result | Arm result | reference result | Verdict |")
     out.append("|---|---|---|---|---|---|")
-    issues = []
+    issues, errors = [], []
     for t in targets:
         pkg, arm = t["Package"], t["arm"]
         cran = problems(os.path.join(oracle, t["log"]))
@@ -139,7 +163,16 @@ def main(oracle, results):
         out.append(f"| {pkg} {t['Version']} | {t['kind']} | {short(cran)} | "
                    f"{short(a['problems']) if a else '-'} | {short(r['problems']) if r else '-'} | "
                    f"{verdict(cran, a, r)} |")
+        theirs = first_error(os.path.join(oracle, t["log"][:-4] + ".install.log"))
+        mine = first_error(os.path.join(results, arm, pkg, pkg + ".Rcheck", "00install.out"))
+        if theirs or mine:
+            errors.append(f"- {pkg}: CRAN `{theirs or 'no install log kept'}`, "
+                          f"arm `{mine or ('installed' if a else 'not checked')}`")
     out.append("")
+    if errors:
+        out.append("First compiler error where an install failed\n")
+        out.extend(errors)
+        out.append("")
 
     others = sorted({p for a in ARMS for p in (os.listdir(os.path.join(results, a))
                                                if os.path.isdir(os.path.join(results, a)) else [])
@@ -153,7 +186,7 @@ def main(oracle, results):
             cells = []
             for a in ARMS:
                 o = ours(results, a, p)
-                cells.append("-" if o is None else f"{o['status']} ({o['minutes']} min)")
+                cells.append("-" if o is None else o["status"])
             out.append(f"| {p} | " + " | ".join(cells) + " |")
         out.append("")
 
@@ -168,10 +201,10 @@ def main(oracle, results):
             o = ours(results, a, p) if os.path.isdir(os.path.join(d, p)) else None
             if o and o["status"] == "did not complete":
                 issues.append(f"{a}/{p}: the check did not finish (see console.log)")
-        skipped = os.path.join(d, "SKIPPED")
-        if os.path.exists(skipped):
-            for line in open(skipped):
-                issues.append(f"{a}: {line.strip()}")
+        for f in sorted(os.listdir(d)):
+            if f.startswith("SKIPPED"):
+                for line in open(os.path.join(d, f)):
+                    issues.append(f"{a}: {line.strip()}")
     out.append("## Problems running the checks\n")
     out.extend(f"- {i}" for i in issues) if issues else out.append("None.")
     print("\n".join(out))
