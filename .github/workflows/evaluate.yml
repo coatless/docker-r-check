@@ -163,6 +163,9 @@ jobs:
         if: env.SKIP != '1'
         run: |
           set -o pipefail
+          # Every build fetches R's recommended packages from CRAN by rsync,
+          # and CRAN limits those connections. Do not start all jobs at once.
+          sleep $((RANDOM % 600))
           # shellcheck disable=SC1090 # the arm file names its Debian suite
           suite=$(. "docker/flavours/$ARM.env" && echo "$RCC_DEBIAN_TAG")
           if ! docker build --progress=plain --platform linux/amd64 --target standalone \
