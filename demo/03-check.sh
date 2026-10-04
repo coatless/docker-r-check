@@ -23,6 +23,7 @@
 #                        as https://packagemanager.posit.co/cran/2026-09-23
 #                        makes two runs install the same versions.
 #   OPENBLAS_CORETYPE    pins the OpenBLAS kernel.
+#   BLIS_ARCH_TYPE       pins the BLIS kernel set, for example haswell.
 #   RCC_LIBRARY_CACHE=1  keeps installed dependencies in a named volume per
 #                        image and mirror, so the next run skips compiling
 #                        them. List the volumes with
@@ -86,6 +87,7 @@ chmod 0755 "$stage"; chmod 0644 "$stage"/*.tar.gz
 env_args=()
 [ -n "${CRAN_MIRROR:-}" ] && env_args+=(-e "CRAN_MIRROR=$CRAN_MIRROR")
 [ -n "${OPENBLAS_CORETYPE:-}" ] && env_args+=(-e "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE")
+[ -n "${BLIS_ARCH_TYPE:-}" ] && env_args+=(-e "BLIS_ARCH_TYPE=$BLIS_ARCH_TYPE")
 [ -n "${MAKEFLAGS:-}" ] && env_args+=(-e "MAKEFLAGS=$MAKEFLAGS")
 
 # Rootless Podman on an SELinux host cannot read an unlabeled bind mount.
@@ -148,13 +150,13 @@ echo "   container exited $rc after $((t / 60))m$((t % 60))s"
 image_id="$("$ENGINE" inspect --format '{{.Image}}' "$name" 2>/dev/null)" ||
     image_id="$("$ENGINE" image inspect --format '{{.Id}}' "$(image "$fl")")"
 
-# OpenBLAS picks its kernel at startup from the CPU, so record the kernel
-# for this run.
-probe="$("$ENGINE" run --rm --platform "$PLATFORM" -e OPENBLAS_VERBOSE=2 \
+# OpenBLAS and BLIS pick their kernels at startup from the CPU, so record
+# the kernel for this run.
+probe="$("$ENGINE" run --rm --platform "$PLATFORM" -e OPENBLAS_VERBOSE=2 -e BLIS_ARCH_DEBUG=1 \
     ${env_args[@]+"${env_args[@]}"} --entrypoint sh "$image_id" -c '
     echo "cpu: $(sed -n "s/^model name[[:space:]]*: //p" /proc/cpuinfo | head -n 1)"
     /build/bin/Rscript --vanilla -e "invisible(crossprod(matrix(1, 2, 2)))" 2>&1 |
-        sed -n "s/^Core: /openblas_core: /p"' 2>/dev/null || true)"
+        sed -n "s/^Core: /openblas_core: /p; s/^libblis: selecting sub-configuration /blis_arch: /p"' 2>/dev/null || true)"
 
 worst=0
 for tb in "${tarballs[@]}"; do
@@ -175,8 +177,9 @@ for tb in "${tarballs[@]}"; do
         echo "Image-Content: $content"
         echo "Platform: $PLATFORM"
         echo "Host: $(uname -s) $(uname -m)"
-        printf '%s\n' "$probe" | sed -n 's/^cpu: /CPU: /p; s/^openblas_core: /OpenBLAS-Core: /p'
+        printf '%s\n' "$probe" | sed -n 's/^cpu: /CPU: /p; s/^openblas_core: /OpenBLAS-Core: /p; s/^blis_arch: /BLIS-Arch: /p'
         echo "OpenBLAS-Coretype-Pinned: ${OPENBLAS_CORETYPE:-no}"
+        echo "BLIS-Arch-Type-Pinned: ${BLIS_ARCH_TYPE:-no}"
         echo "Mode: $mode"
         echo "CRAN-Mirror: ${CRAN_MIRROR:-https://cloud.r-project.org (live, unpinned)}"
         echo "Library: $library"
