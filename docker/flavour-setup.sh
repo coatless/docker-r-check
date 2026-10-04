@@ -7,7 +7,7 @@
 #   1. writes the apt source, signing key and preferences the arm needs
 #   2. installs RCC_SYSDEPS from apt, and removes RCC_APT_REMOVE if installed
 #   3. fetches RCC_SYSDEB_URLS, checks them against RCC_SYSDEB_SHA256, dpkg -i
-#   4. apt-mark holds RCC_APT_HOLD
+#   4. apt-mark holds RCC_APT_HOLD, then runs RCC_SETUP_SCRIPT if there is one
 #   5. runs blas-wiring.sh apply, which also verifies
 #   6. writes RCC_CHECK_ENV to /etc/rcheck/check.env for entry-pkgcheck.sh
 #
@@ -30,7 +30,7 @@ ENVFILE="$FLAVOURS_DIR/$FLAVOUR.env"
 
 : "${RCC_ARCH:=}" "${RCC_SYSDEPS:=}" "${RCC_SYSDEB_URLS:=}" "${RCC_SYSDEB_SHA256:=}"
 : "${RCC_APT_PIN:=}" "${RCC_APT_HOLD:=}" "${RCC_APT_REMOVE:=}" "${RCC_DESC:=}"
-: "${RCC_APT_SOURCE:=}" "${RCC_APT_KEY:=}" "${RCC_CHECK_ENV:=}"
+: "${RCC_APT_SOURCE:=}" "${RCC_APT_KEY:=}" "${RCC_CHECK_ENV:=}" "${RCC_SETUP_SCRIPT:=}"
 
 export DEBIAN_FRONTEND=noninteractive
 HOST_ARCH="$(dpkg --print-architecture)"
@@ -118,6 +118,11 @@ fi
 if [ -n "$RCC_APT_HOLD" ]; then
     # shellcheck disable=SC2086
     apt-mark hold $RCC_APT_HOLD
+fi
+
+if [ -n "$RCC_SETUP_SCRIPT" ]; then
+    echo "  running $RCC_SETUP_SCRIPT"
+    sh "$FLAVOURS_DIR/$RCC_SETUP_SCRIPT"
 fi
 
 # --- 5. select and verify the BLAS ----------------------------------------

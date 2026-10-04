@@ -59,6 +59,15 @@ flavour_spec() {
             "libblas.so-$MA|$L/blis-serial/libblas.so" \
             "liblapack.so-$MA|$L/lapack/liblapack.so"
         ;;
+    blis20|blisfedora)
+        # A BLIS in /opt/blis, registered by flavours/blis-register.sh.
+        printf '%s\n' \
+            "libblis.so.4-$MA|/opt/blis/lib/libblis.so.4" \
+            "libblas.so.3-$MA|/opt/blis/lib/libblis.so.4" \
+            "liblapack.so.3-$MA|$L/lapack/liblapack.so.3" \
+            "libblas.so-$MA|/opt/blis/lib/libblis.so" \
+            "liblapack.so-$MA|$L/lapack/liblapack.so"
+        ;;
     mkl|clang23)
         # MKL is linked by path and does not use alternatives. clang23 uses
         # R's own BLAS. Both keep the reference selection.
@@ -83,6 +92,7 @@ expected_fragment() {
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
     blis)      echo "/blis-serial/" ;;
+    blis20|blisfedora) echo "/opt/blis/" ;;
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;
     clang23)   echo "libRblas.so" ;;
     *)         echo "" ;;

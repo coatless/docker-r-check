@@ -11,6 +11,7 @@ One file per arm, sourced by docker/flavour-setup.sh inside the image.
   RCC_APT_REMOVE    packages to remove before RCC_SYSDEB_URLS, if installed
   RCC_RCONF_FLAGS   flags passed through build-R to Rconf
   RCC_LDFLAGS       appended to the configure line
+  RCC_SETUP_SCRIPT  script in this directory, run after the packages are installed
   RCC_CHECK_ENV     NAME=value settings exported while checking, '|' between them
   RCC_DESC          one-line description, written to /etc/rcheck/flavour.txt
 
