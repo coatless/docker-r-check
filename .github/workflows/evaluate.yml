@@ -18,9 +18,9 @@ permissions:
 env:
   # CRAN issue kinds to run. The arms are chosen from the kinds that have
   # packages listed today.
-  KINDS: BLIS
+  KINDS: OpenBLAS MKL BLIS ATLAS clang23
   # Limit a run to these job labels. Empty runs every job.
-  ONLY: blis-fedora-haswell blis-2.0-skx
+  ONLY: ""
   # Small packages of different kinds: C, more C, Fortran, C calling the
   # BLAS, saved test output that depends on the BLAS, and knitr vignettes.
   OTHER_PACKAGES: base64enc digest quadprog irlba maxLik jsonlite
@@ -88,23 +88,25 @@ jobs:
           for row in csv.DictReader(open("oracle/targets.tsv"), delimiter="\t"):
               count[row["arm"]] = count.get(row["arm"], 0) + 1
           jobs = [{"arm": "reference", "targets": "reference", "label": "reference", "shard": 1, "shards": 1}]
+          # Arms with nothing on CRAN's list today still check the other packages.
+          for arm in ("openblas", "mkl", "atlas"):
+              count.setdefault(arm, 0)
           for arm in sorted(count):
               # A long list is split over several jobs of about 10 packages.
-              shards = min(10, math.ceil(count[arm] / 10))
-              jobs += [{"arm": arm, "targets": arm, "label": arm, "shard": s, "shards": shards}
-                       for s in range(1, shards + 1)]
-              if arm == "blis":
-                  # CRAN's BLIS is Fedora's 2.0-5. Besides Debian's BLIS, try 2.0
-                  # built with Fedora's settings and Fedora's own binary.
-                  builds = [("blis", "blis"), ("blis20", "blis-2.0"), ("blisfedora", "blis-fedora")]
-                  jobs += [{"arm": a, "targets": "blis", "label": label, "shard": 1, "shards": 1}
-                           for a, label in builds[1:]]
-                  # BLIS picks its kernels from the CPU, and the results depend
-                  # on them. Also run each build with the kernel set pinned. skx
-                  # needs AVX-512, which only some runners have.
-                  jobs += [{"arm": a, "targets": "blis", "label": f"{label}-{k}", "blis_arch": k,
-                            "shard": 1, "shards": 1}
-                           for a, label in builds for k in ("haswell", "skx")]
+              shards = max(1, min(10, math.ceil(count[arm] / 10)))
+              if arm != "blis":
+                  jobs += [{"arm": arm, "targets": arm, "label": arm, "shard": s, "shards": shards}
+                           for s in range(1, shards + 1)]
+                  continue
+              # CRAN's BLIS is Fedora's 2.0-5. Besides Debian's BLIS, run 2.0 built
+              # with Fedora's settings and Fedora's own binary. BLIS picks its
+              # kernels from the CPU and the results depend on them, so every job
+              # pins the kernel set. skx needs AVX-512, which only some runners
+              # have.
+              builds = [("blis", "blis"), ("blis20", "blis-2.0"), ("blisfedora", "blis-fedora")]
+              jobs += [{"arm": a, "targets": "blis", "label": f"{label}-{k}", "blis_arch": k,
+                        "shard": 1, "shards": 1}
+                       for a, label in builds for k in ("zen3", "haswell", "skx")]
           only = os.environ.get("ONLY", "").split()
           jobs = [j for j in jobs if not only or j["label"] in only]
           print("matrix=" + json.dumps({"include": jobs}))
