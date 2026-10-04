@@ -26,7 +26,7 @@ L="/usr/lib/$MA"
 # Print one "<alternatives-group>|<target>" line per group the arm sets.
 flavour_spec() {
     case "$1" in
-    reference)
+    reference|forky)
         printf '%s\n' \
             "libblas.so.3-$MA|$L/blas/libblas.so.3" \
             "liblapack.so.3-$MA|$L/lapack/liblapack.so.3"
@@ -50,6 +50,24 @@ flavour_spec() {
             "libblas.so-$MA|$L/atlas/libblas.so" \
             "liblapack.so-$MA|$L/atlas/liblapack.so"
         ;;
+    blis)
+        # BLIS supplies the BLAS. Debian's reference LAPACK runs on top of it,
+        # as the system LAPACK does in CRAN's BLIS checks.
+        printf '%s\n' \
+            "libblas.so.3-$MA|$L/blis-serial/libblas.so.3" \
+            "liblapack.so.3-$MA|$L/lapack/liblapack.so.3" \
+            "libblas.so-$MA|$L/blis-serial/libblas.so" \
+            "liblapack.so-$MA|$L/lapack/liblapack.so"
+        ;;
+    blisfedora)
+        # A BLIS in /opt/blis, registered by flavours/blis-register.sh.
+        printf '%s\n' \
+            "libblis.so.4-$MA|/opt/blis/lib/libblis.so.4" \
+            "libblas.so.3-$MA|/opt/blis/lib/libblis.so.4" \
+            "liblapack.so.3-$MA|$L/lapack/liblapack.so.3" \
+            "libblas.so-$MA|/opt/blis/lib/libblis.so" \
+            "liblapack.so-$MA|$L/lapack/liblapack.so"
+        ;;
     mkl|clang23)
         # MKL is linked by path and does not use alternatives. clang23 uses
         # R's own BLAS. Both keep the reference selection.
@@ -70,11 +88,13 @@ expected_fragment() {
     case "$1" in
     # -bi builds R with its own BLAS at $R_HOME/lib/libRblas.so, so that is
     # what R reports, whatever the Debian alternatives say.
-    reference) echo "libRblas.so" ;;
+    reference|forky) echo "libRblas.so" ;;
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
+    blis)      echo "/blis-serial/" ;;
+    blisfedora) echo "/opt/blis/" ;;
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;
-    clang23)   echo "" ;;   # internal reference BLAS; nothing external to match
+    clang23)   echo "libRblas.so" ;;
     *)         echo "" ;;
     esac
 }

@@ -3,6 +3,7 @@ name: build
 on:
   push:
     branches: [debian-blas-arms]
+    paths-ignore: [README.md, demo/**, eval/**, .github/workflows/evaluate.yml]
   workflow_dispatch:
     inputs:
       debian_tag:
@@ -144,7 +145,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavour: [reference, openblas, atlas]
+        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky]
     steps:
       - uses: actions/checkout@v5
 
@@ -172,9 +173,11 @@ jobs:
         run: |
           set -o pipefail
           cd docker
+          # shellcheck disable=SC1090 # the arm file names its Debian suite
+          suite=$(. "flavours/$FLAVOUR.env" && echo "$RCC_DEBIAN_TAG")
           docker build \
             --progress=plain \
-            --build-arg DEBIAN_TAG=trixie \
+            --build-arg DEBIAN_TAG="$suite" \
             --build-arg RCC_FLAVOUR="$FLAVOUR" \
             --build-arg R_SVN_REV=90410 \
             --build-arg QA_SVN_REV=6927 \

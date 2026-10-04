@@ -40,6 +40,13 @@ ln -sfn /build/CRAN ~/tmp/CRAN
 mkdir -p ~/.R
 cp /src/QA/.R/* ~/.R/
 
+## settings the arm needs while checking, written by flavour-setup.sh
+if [ -r /etc/rcheck/check.env ]; then
+    set -a
+    . /etc/rcheck/check.env
+    set +a
+fi
+
 ## repos relies on local copies so check if they are mounted, otherwise replace with online versions
 if [ ! -e /data/Repositories ]; then
     echo NOTE: local /data/Repositories are not mounted, switching to online versions

@@ -4,9 +4,16 @@ One file per arm, sourced by docker/flavour-setup.sh inside the image.
   RCC_ARCH          restrict to one architecture, empty = any
   RCC_SYSDEPS       apt packages
   RCC_SYSDEB_URLS   .deb files fetched by URL (for packages no longer in the suite)
+  RCC_APT_SOURCE    extra apt source in deb822 form, '|' between lines
+  RCC_APT_KEY       signing key for that source, a file in this directory
   RCC_APT_PIN       apt preferences content, applied before RCC_SYSDEB_URLS
   RCC_APT_HOLD      packages to apt-mark hold after install
   RCC_APT_REMOVE    packages to remove before RCC_SYSDEB_URLS, if installed
   RCC_RCONF_FLAGS   flags passed through build-R to Rconf
   RCC_LDFLAGS       appended to the configure line
+  RCC_SETUP_SCRIPT  script in this directory, run after the packages are installed
+  RCC_CHECK_ENV     NAME=value settings exported while checking, '|' between them
   RCC_DESC          one-line description, written to /etc/rcheck/flavour.txt
+
+An arm can also export variables that Rconf reads from the environment, as
+clang23.env does with CXX_STDLIB.

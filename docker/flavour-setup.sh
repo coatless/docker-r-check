@@ -4,11 +4,12 @@
 #   flavour-setup.sh <flavour> [flavours-dir]
 #
 # Reads flavours/<flavour>.env (see flavours/README) and, in this order:
-#   1. writes the apt preferences the arm needs
+#   1. writes the apt source, signing key and preferences the arm needs
 #   2. installs RCC_SYSDEPS from apt, and removes RCC_APT_REMOVE if installed
 #   3. fetches RCC_SYSDEB_URLS, checks them against RCC_SYSDEB_SHA256, dpkg -i
-#   4. apt-mark holds RCC_APT_HOLD
+#   4. apt-mark holds RCC_APT_HOLD, then runs RCC_SETUP_SCRIPT if there is one
 #   5. runs blas-wiring.sh apply, which also verifies
+#   6. writes RCC_CHECK_ENV to /etc/rcheck/check.env for entry-pkgcheck.sh
 #
 # The order matters for ATLAS. libgfortran5 has to be installed before
 # dpkg -i, and the pin keeps a later apt run from replacing ATLAS 3.10.3-13
@@ -29,6 +30,7 @@ ENVFILE="$FLAVOURS_DIR/$FLAVOUR.env"
 
 : "${RCC_ARCH:=}" "${RCC_SYSDEPS:=}" "${RCC_SYSDEB_URLS:=}" "${RCC_SYSDEB_SHA256:=}"
 : "${RCC_APT_PIN:=}" "${RCC_APT_HOLD:=}" "${RCC_APT_REMOVE:=}" "${RCC_DESC:=}"
+: "${RCC_APT_SOURCE:=}" "${RCC_APT_KEY:=}" "${RCC_CHECK_ENV:=}" "${RCC_SETUP_SCRIPT:=}"
 
 export DEBIAN_FRONTEND=noninteractive
 HOST_ARCH="$(dpkg --print-architecture)"
@@ -42,7 +44,17 @@ if [ -n "$RCC_ARCH" ] && [ "$RCC_ARCH" != "$HOST_ARCH" ]; then
     exit 1
 fi
 
-# --- 1. apt preferences, before anything is installed ----------------------
+# --- 1. apt source, key and preferences, before anything is installed -----
+if [ -n "$RCC_APT_KEY" ]; then
+    echo "  key: /etc/apt/keyrings/$RCC_APT_KEY"
+    install -d /etc/apt/keyrings
+    install -m 0644 "$FLAVOURS_DIR/$RCC_APT_KEY" "/etc/apt/keyrings/$RCC_APT_KEY"
+fi
+if [ -n "$RCC_APT_SOURCE" ]; then
+    echo "  writing /etc/apt/sources.list.d/rcc-$FLAVOUR.sources"
+    printf '%s\n' "$RCC_APT_SOURCE" | tr '|' '\n' > "/etc/apt/sources.list.d/rcc-$FLAVOUR.sources"
+    sed 's/^/    /' "/etc/apt/sources.list.d/rcc-$FLAVOUR.sources"
+fi
 if [ -n "$RCC_APT_PIN" ]; then
     echo "  writing /etc/apt/preferences.d/rcc-$FLAVOUR"
     printf '%s\n' "$RCC_APT_PIN" | tr '|' '\n' > "/etc/apt/preferences.d/rcc-$FLAVOUR"
@@ -108,18 +120,31 @@ if [ -n "$RCC_APT_HOLD" ]; then
     apt-mark hold $RCC_APT_HOLD
 fi
 
+if [ -n "$RCC_SETUP_SCRIPT" ]; then
+    echo "  running $RCC_SETUP_SCRIPT"
+    sh "$FLAVOURS_DIR/$RCC_SETUP_SCRIPT"
+fi
+
 # --- 5. select and verify the BLAS ----------------------------------------
 echo "  wiring BLAS for $FLAVOUR"
 sh "$WIRING" apply "$FLAVOUR"
 
 # --- 6. record what was installed -----------------------------------------
 install -d /etc/rcheck
+if [ -n "$RCC_CHECK_ENV" ]; then
+    printf '%s\n' "$RCC_CHECK_ENV" | tr '|' '\n' > /etc/rcheck/check.env
+    echo "  check environment:"
+    sed 's/^/    /' /etc/rcheck/check.env
+fi
 {
     echo "flavour: $FLAVOUR"
     echo "desc: $RCC_DESC"
     echo "arch: $HOST_ARCH"
     echo "rconf_flags: ${RCC_RCONF_FLAGS:-}"
+    echo "apt_source: $(printf '%s' "$RCC_APT_SOURCE" | sed -n 's/.*URIs: \([^|]*\).*/\1/p')"
     echo "sysdeps: $RCC_SYSDEPS"
+    # shellcheck disable=SC2046,SC2086
+    echo "sysdep_versions: $(dpkg-query -W -f='${Package}=${Version} ' $(printf '%s\n' $RCC_SYSDEPS | sed 's/=.*//') 2>/dev/null)"
     echo "removed: $removed"
     echo "sysdeb_urls: $RCC_SYSDEB_URLS"
     echo "--- resolved libraries ---"
