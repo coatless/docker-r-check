@@ -86,6 +86,7 @@ chmod 0755 "$stage"; chmod 0644 "$stage"/*.tar.gz
 env_args=()
 [ -n "${CRAN_MIRROR:-}" ] && env_args+=(-e "CRAN_MIRROR=$CRAN_MIRROR")
 [ -n "${OPENBLAS_CORETYPE:-}" ] && env_args+=(-e "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE")
+[ -n "${MAKEFLAGS:-}" ] && env_args+=(-e "MAKEFLAGS=$MAKEFLAGS")
 
 # Rootless Podman on an SELinux host cannot read an unlabeled bind mount.
 pkg_mount="$stage:/pkg:ro"

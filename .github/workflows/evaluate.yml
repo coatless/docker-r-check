@@ -1,0 +1,196 @@
+name: evaluate
+
+# Check CRAN's current BLAS issues in the arm that matches each one, with the
+# reference arm as the control, plus a fixed set of other packages in every
+# arm. All arms use the same R and QA revisions and the same dated CRAN
+# snapshot, and the report compares the results with CRAN's own logs.
+
+on:
+  push:
+    branches: [more-arms]
+    paths: [.github/workflows/evaluate.yml, eval/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Small packages of different kinds: C, more C, Fortran, C calling the
+  # BLAS, saved test output that depends on the BLAS, and knitr vignettes.
+  OTHER_PACKAGES: base64enc digest quadprog irlba maxLik jsonlite
+
+jobs:
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      r_rev: ${{ steps.pin.outputs.r_rev }}
+      qa_rev: ${{ steps.pin.outputs.qa_rev }}
+      snapshot: ${{ steps.pin.outputs.snapshot }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: pin the revisions and the snapshot for every arm
+        id: pin
+        run: |
+          r_rev=$(curl -fsSL https://svn.r-project.org/R/trunk/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
+          qa_rev=$(curl -fsSL https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
+          snapshot=$(date -u -d '1 day ago' +%Y-%m-%d)
+          [ -n "$r_rev" ] && [ -n "$qa_rev" ]
+          {
+            echo "r_rev=$r_rev"
+            echo "qa_rev=$qa_rev"
+            echo "snapshot=$snapshot"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: save CRAN's current BLAS issues and their logs
+        env:
+          R_REV: ${{ steps.pin.outputs.r_rev }}
+          QA_REV: ${{ steps.pin.outputs.qa_rev }}
+          SNAPSHOT: ${{ steps.pin.outputs.snapshot }}
+        run: |
+          set -o pipefail
+          mkdir -p oracle/logs
+          cd oracle
+          curl -fsSL -D rds.headers -o check_issues.rds https://cran.r-project.org/web/checks/check_issues.rds
+          curl -fsSL -o README.txt https://www.stats.ox.ac.uk/pub/bdr/Rblas/README.txt
+          docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/w" -w /w/oracle \
+            docker.io/library/r-base:latest Rscript /w/eval/targets.R
+          tail -n +2 targets.tsv | while IFS=$'\t' read -r pkg _ kind href _ log; do
+            curl -fsSL -o "$log" "$href" || echo "could not fetch $href ($pkg, $kind)"
+          done
+          {
+            echo "R-revision: $R_REV"
+            echo "QA-revision: $QA_REV"
+            echo "CRAN-snapshot: $SNAPSHOT"
+            echo "check_issues-Last-Modified: $(sed -n 's/^[Ll]ast-[Mm]odified: //p' rds.headers | tr -d '\r')"
+            echo "Fetched: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > run.txt
+          cat run.txt
+          column -t -s $'\t' targets.tsv | cut -c1-120
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oracle
+          path: oracle/
+
+  check:
+    needs: targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [reference, openblas, mkl, blis, atlas]
+    env:
+      ARM: ${{ matrix.arm }}
+      R_REV: ${{ needs.targets.outputs.r_rev }}
+      QA_REV: ${{ needs.targets.outputs.qa_rev }}
+      SNAPSHOT: ${{ needs.targets.outputs.snapshot }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oracle
+          path: oracle
+
+      - name: reclaim disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          df -h /
+
+      - name: build the arm
+        run: |
+          set -o pipefail
+          mkdir -p "out/$ARM"
+          if ! docker build --progress=plain --platform linux/amd64 --target standalone \
+                 --build-arg DEBIAN_TAG=trixie --build-arg RCC_FLAVOUR="$ARM" \
+                 --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
+                 --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
+                 -t "rcc-standalone:$ARM" docker/ > build.log 2>&1; then
+            tail -n 60 build.log
+            tail -n 20 build.log > "out/$ARM/BUILD-FAILED"
+            exit 1
+          fi
+          docker run --rm --entrypoint cat "rcc-standalone:$ARM" /etc/rcheck/manifest.txt | tee "out/$ARM/manifest.txt"
+
+      - name: check the packages
+        env:
+          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
+          RCC_MODE: regular
+          OPENBLAS_CORETYPE: Haswell
+          MAKEFLAGS: -j4
+        run: |
+          # shellcheck disable=SC2086 # the package lists are split on purpose
+          if [ "$ARM" = reference ]; then
+            targets=$(tail -n +2 oracle/targets.tsv | cut -f1)
+          else
+            targets=$(tail -n +2 oracle/targets.tsv | awk -F'\t' -v a="$ARM" '$5 == a {print $1}')
+          fi
+          curl -fsSL -o PACKAGES "$CRAN_MIRROR/src/contrib/PACKAGES"
+          pkgs=""
+          for p in $(printf '%s\n' $targets $OTHER_PACKAGES | awk '!seen[$0]++'); do
+            if grep -qx "Package: $p" PACKAGES; then
+              pkgs="$pkgs $p"
+            else
+              echo "$p is not in the $SNAPSHOT snapshot, so it was not checked" | tee -a "out/$ARM/SKIPPED"
+            fi
+          done
+          echo "checking in $ARM:$pkgs"
+          demo/03-check.sh "$ARM" $pkgs || echo "03-check.sh exited $?"
+
+      - name: keep the logs
+        if: always()
+        run: |
+          [ -d "results/$ARM" ] || exit 0
+          for d in results/"$ARM"/*/; do
+            p=$(basename "$d")
+            [ -f "$d/manifest.dcf" ] || continue
+            mkdir -p "out/$ARM/$p"
+            cp "$d/manifest.dcf" "$d/console.log" "out/$ARM/$p/"
+            if [ -d "$d/$p.Rcheck" ]; then
+              mkdir -p "out/$ARM/$p/$p.Rcheck"
+              (cd "$d/$p.Rcheck" && find . -maxdepth 2 \( -name '00check.log' -o -name '00install.out' \
+                 -o -name '*.Rout' -o -name '*.Rout.fail' -o -name '*.Rout.save' -o -name '*-Ex.Rout' \) \
+                 -exec cp --parents {} "$GITHUB_WORKSPACE/out/$ARM/$p/$p.Rcheck/" \;)
+            fi
+          done
+          cp build.log "out/$ARM/" 2>/dev/null || true
+          du -sh "out/$ARM"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.arm }}
+          path: out/
+
+  report:
+    needs: [targets, check]
+    if: always() && needs.targets.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oracle
+          path: oracle
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          merge-multiple: true
+          path: out
+
+      - name: compare with CRAN
+        run: |
+          python3 eval/report.py oracle out | tee report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: report.md
