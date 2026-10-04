@@ -7,6 +7,11 @@ if [ ! -e /build ]; then
     mkdir /build
 fi
 
+## R's recommended packages, over HTTPS with rsync as the fallback
+recommended() {
+    sh /opt/rcheck/fetch-recommended.sh /src/R || ( cd /src/R && tools/rsync-recommended )
+}
+
 ## /src will be populated in the image, but if it was mounted, check if it is complete
 if [ ! -e /src/QA ]; then
     echo == /src mounted without QA, populating from SVN
@@ -20,11 +25,11 @@ fi
 
 if [ ! -e /src/R ]; then
     echo == /src mounted without R sources, fetching R-devel
-    svn co https://svn.r-project.org/R/trunk /src/R && ( cd /src/R && tools/rsync-recommended )
+    svn co https://svn.r-project.org/R/trunk /src/R && recommended
 else
     if [ -z "${NO_UPDATE}" -a -e /src/R/.svn ]; then
 	echo ==	Updating R from SVN
-        ( cd /src/R && svn up && tools/rsync-recommended )
+        ( cd /src/R && svn up ) && recommended
     fi
 fi
 
