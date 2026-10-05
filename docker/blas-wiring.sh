@@ -26,7 +26,7 @@ L="/usr/lib/$MA"
 # Print one "<alternatives-group>|<target>" line per group the arm sets.
 flavour_spec() {
     case "$1" in
-    reference|forky)
+    reference|forky|nold)
         printf '%s\n' \
             "libblas.so.3-$MA|$L/blas/libblas.so.3" \
             "liblapack.so.3-$MA|$L/lapack/liblapack.so.3"
@@ -88,7 +88,7 @@ expected_fragment() {
     case "$1" in
     # -bi builds R with its own BLAS at $R_HOME/lib/libRblas.so, so that is
     # what R reports, whatever the Debian alternatives say.
-    reference|forky) echo "libRblas.so" ;;
+    reference|forky|nold) echo "libRblas.so" ;;
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
     blis)      echo "/blis-serial/" ;;

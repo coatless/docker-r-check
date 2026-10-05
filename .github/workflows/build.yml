@@ -145,7 +145,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky]
+        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky, nold]
     steps:
       - uses: actions/checkout@v5
 
