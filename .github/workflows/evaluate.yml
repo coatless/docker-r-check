@@ -180,6 +180,17 @@ jobs:
             echo "SKIP=1" >> "$GITHUB_ENV"
           fi
 
+      - name: add swap
+        if: env.SKIP != '1'
+        run: |
+          # Exporting the finished image takes about 15 GiB of memory, which is
+          # all a runner has. Without more swap the runner is shut down.
+          sudo fallocate -l 16G /rcc-swap
+          sudo chmod 600 /rcc-swap
+          sudo mkswap /rcc-swap > /dev/null
+          sudo swapon /rcc-swap
+          free -h
+
       - name: build the arm
         if: env.SKIP != '1'
         run: |
