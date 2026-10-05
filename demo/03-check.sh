@@ -24,6 +24,9 @@
 #                        makes two runs install the same versions.
 #   OPENBLAS_CORETYPE    pins the OpenBLAS kernel.
 #   BLIS_ARCH_TYPE       pins the BLIS kernel set, for example haswell.
+#   RCC_NETWORK=none     runs the check with the network cut off. Use it with
+#                        RCC_LIBRARY_CACHE=1 after a run that installed the
+#                        dependencies.
 #   _R_CHECK_*           any R CMD check setting in the environment is passed
 #                        on, for example _R_CHECK_ELAPSED_TIMEOUT_=3600.
 #   RCC_LIBRARY_CACHE=1  keeps installed dependencies in a named volume per
@@ -94,6 +97,9 @@ env_args=()
 # R CMD check settings such as _R_CHECK_ELAPSED_TIMEOUT_ pass straight through.
 for v in $(env | sed -n 's/^\(_R_CHECK_[A-Z0-9_]*\)=.*/\1/p'); do env_args+=(-e "$v"); done
 
+net_args=()
+[ -n "${RCC_NETWORK:-}" ] && net_args=(--network "$RCC_NETWORK")
+
 # Rootless Podman on an SELinux host cannot read an unlabeled bind mount.
 pkg_mount="$stage:/pkg:ro"
 case "$(basename "$ENGINE")" in podman*) pkg_mount="$pkg_mount,z" ;; esac
@@ -146,6 +152,7 @@ rc=0
 "$ENGINE" run --platform "$PLATFORM" --name "$name" \
     --security-opt no-new-privileges --cap-drop ALL --pids-limit 4096 \
     ${env_args[@]+"${env_args[@]}"} ${lib_args[@]+"${lib_args[@]}"} \
+    ${net_args[@]+"${net_args[@]}"} \
     -v "$pkg_mount" "$(image "$fl")" ${entry_args[@]+"${entry_args[@]}"} >"$console" 2>&1 || rc=$?
 t=$((SECONDS - start))
 echo "   container exited $rc after $((t / 60))m$((t % 60))s"
@@ -185,6 +192,8 @@ for tb in "${tarballs[@]}"; do
         echo "OpenBLAS-Coretype-Pinned: ${OPENBLAS_CORETYPE:-no}"
         echo "BLIS-Arch-Type-Pinned: ${BLIS_ARCH_TYPE:-no}"
         echo "Mode: $mode"
+        echo "Engine: $ENGINE"
+        echo "Network: ${RCC_NETWORK:-on}"
         echo "CRAN-Mirror: ${CRAN_MIRROR:-https://cloud.r-project.org (live, unpinned)}"
         echo "Library: $library"
         echo "Started: $stamp"

@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   # Small packages of different kinds: C, more C, Fortran, C calling the
@@ -36,10 +37,13 @@ jobs:
       qa_rev: ${{ steps.pin.outputs.qa_rev }}
       snapshot: ${{ steps.pin.outputs.snapshot }}
       matrix: ${{ steps.arms.outputs.matrix }}
+      conditions: ${{ steps.read.outputs.conditions }}
+      baseline: ${{ steps.read.outputs.baseline }}
     steps:
       - uses: actions/checkout@v5
 
       - name: read what to run
+        id: read
         env:
           IN_KINDS: ${{ inputs.kinds }}
           IN_ONLY: ${{ inputs.only }}
@@ -48,15 +52,38 @@ jobs:
           {
             echo "KINDS=${IN_KINDS:-$KINDS}"
             echo "ONLY=${IN_ONLY:-$ONLY}"
+            echo "BASELINE_RUN=$BASELINE_RUN"
           } | tee -a "$GITHUB_ENV"
+          {
+            echo "conditions=$CONDITIONS"
+            echo "baseline=$BASELINE_RUN"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: take the list and CRAN's logs from an earlier run
+        if: env.BASELINE_RUN != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$BASELINE_RUN" -R "$GITHUB_REPOSITORY" -n oracle -D oracle
+          awk -F'\t' -v kinds=" $KINDS " 'NR == 1 || index(kinds, " " $3 " ")' oracle/targets.tsv > targets.tsv
+          mv targets.tsv oracle/targets.tsv
+          echo "Baseline-run: $BASELINE_RUN" >> oracle/run.txt
+          cat oracle/run.txt
+          cut -f1-3,5 oracle/targets.tsv | column -t -s $'\t'
 
       - name: pin the revisions and the snapshot for every arm
         id: pin
         run: |
-          r_rev=$(curl -fsSL https://svn.r-project.org/R/trunk/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
-          qa_rev=$(curl -fsSL https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
-          snapshot=$(date -u -d '1 day ago' +%Y-%m-%d)
-          [ -n "$r_rev" ] && [ -n "$qa_rev" ]
+          if [ -n "$BASELINE_RUN" ]; then
+            r_rev=$(sed -n 's/^R-revision: //p' oracle/run.txt)
+            qa_rev=$(sed -n 's/^QA-revision: //p' oracle/run.txt)
+            snapshot=$(sed -n 's/^CRAN-snapshot: //p' oracle/run.txt)
+          else
+            r_rev=$(curl -fsSL https://svn.r-project.org/R/trunk/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
+            qa_rev=$(curl -fsSL https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
+            snapshot=$(date -u -d '1 day ago' +%Y-%m-%d)
+          fi
+          [ -n "$r_rev" ] && [ -n "$qa_rev" ] && [ -n "$snapshot" ]
           {
             echo "r_rev=$r_rev"
             echo "qa_rev=$qa_rev"
@@ -64,6 +91,7 @@ jobs:
           } | tee -a "$GITHUB_OUTPUT"
 
       - name: save CRAN's current issues and their logs
+        if: env.BASELINE_RUN == ''
         env:
           R_REV: ${{ steps.pin.outputs.r_rev }}
           QA_REV: ${{ steps.pin.outputs.qa_rev }}
@@ -107,7 +135,13 @@ jobs:
               count.setdefault(arm, 0)
           for arm in sorted(count):
               # A long list is split over several jobs of about 10 packages.
-              shards = max(1, min(10, math.ceil(count[arm] / 10)))
+              shards = max(1, min(20, math.ceil(count[arm] / 10)))
+              if arm == "donttest":
+                  # The reference arm, with the \\donttest examples switched on.
+                  jobs += [{"arm": "reference", "targets": arm, "label": arm, "shard": s, "shards": shards,
+                            "check_env": "_R_CHECK_DONTTEST_EXAMPLES_=true"}
+                           for s in range(1, shards + 1)]
+                  continue
               if arm != "blis":
                   jobs += [{"arm": arm, "targets": arm, "label": arm, "shard": s, "shards": shards}
                            for s in range(1, shards + 1)]
@@ -146,6 +180,8 @@ jobs:
       TARGETS: ${{ matrix.targets }}
       LABEL: ${{ matrix.label }}
       BLIS_ARCH_TYPE: ${{ matrix.blis_arch }}
+      CHECK_ENV: ${{ matrix.check_env }}
+      CONDITIONS: ${{ needs.targets.outputs.conditions }}
       SHARD: ${{ matrix.shard }}
       SHARDS: ${{ matrix.shards }}
       R_REV: ${{ needs.targets.outputs.r_rev }}
@@ -225,11 +261,12 @@ jobs:
           # not use up the job.
           _R_CHECK_ELAPSED_TIMEOUT_: 3600
         run: |
-          # reference is the control for every BLAS issue, and for the clang23
-          # packages that fail to install at CRAN.
-          case "$ARM" in
+          # reference is the control for every BLAS and noLD issue, and for the
+          # clang23 packages that fail to install at CRAN.
+          case "$LABEL" in
           reference)
-            targets=$(tail -n +2 oracle/targets.tsv | awk -F'\t' '$5 != "clang23" || $7 != "-" {print $1}') ;;
+            targets=$(tail -n +2 oracle/targets.tsv |
+              awk -F'\t' '($5 != "clang23" && $5 != "donttest") || $7 != "-" {print $1}') ;;
           *)
             targets=$(tail -n +2 oracle/targets.tsv |
               awk -F'\t' -v a="$TARGETS" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1}') ;;
@@ -247,6 +284,11 @@ jobs:
             fi
           done
           echo "checking in $ARM:$pkgs"
+          echo "$pkgs" > pkgs.txt
+          # Settings for this list, such as running the \donttest examples.
+          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
+          # The other conditions reuse the installed dependencies.
+          [ -z "$CONDITIONS" ] || export RCC_LIBRARY_CACHE=1
           # Stop the container before the job's time limit, so that the results
           # of the packages it finished are still collected.
           ( sleep $((285 * 60))
@@ -257,24 +299,60 @@ jobs:
           demo/03-check.sh "$ARM" $pkgs || echo "03-check.sh exited $?"
           kill "$watchdog" 2>/dev/null || true
 
+      - name: repeat the checks with the network cut off
+        if: env.SKIP != '1' && contains(env.CONDITIONS, 'offline')
+        env:
+          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
+          RCC_MODE: regular
+          OPENBLAS_CORETYPE: Haswell
+          _R_CHECK_ELAPSED_TIMEOUT_: 3600
+          RCC_LIBRARY_CACHE: 1
+          RCC_NETWORK: none
+        run: |
+          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
+          # shellcheck disable=SC2046
+          RCC_RESULTS="$PWD/results@offline" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
+            echo "03-check.sh exited $?"
+
+      - name: repeat the checks under Podman
+        if: env.SKIP != '1' && contains(env.CONDITIONS, 'podman')
+        env:
+          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
+          RCC_MODE: regular
+          OPENBLAS_CORETYPE: Haswell
+          _R_CHECK_ELAPSED_TIMEOUT_: 3600
+          RCC_ENGINE: podman
+        run: |
+          podman --version
+          podman info --format 'storage driver: {{.Store.GraphDriverName}}'
+          # The same image, copied from Docker's store into Podman's.
+          docker save "rcc-standalone:$ARM" | podman load
+          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
+          # shellcheck disable=SC2046
+          RCC_RESULTS="$PWD/results@podman" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
+            echo "03-check.sh exited $?"
+
       - name: keep the logs
         if: always()
         run: |
-          [ -d "results/$ARM" ] || exit 0
-          for d in results/"$ARM"/*/; do
-            p=$(basename "$d")
-            [ -f "$d/manifest.dcf" ] || continue
-            mkdir -p "out/$LABEL/$p"
-            cp "$d/manifest.dcf" "$d/console.log" "out/$LABEL/$p/"
-            if [ -d "$d/$p.Rcheck" ]; then
-              mkdir -p "out/$LABEL/$p/$p.Rcheck"
-              (cd "$d/$p.Rcheck" && find . -maxdepth 2 \( -name '00check.log' -o -name '00install.out' \
-                 -o -name '*.Rout' -o -name '*.Rout.fail' -o -name '*.Rout.save' -o -name '*-Ex.Rout' \) \
-                 -exec cp --parents {} "$GITHUB_WORKSPACE/out/$LABEL/$p/$p.Rcheck/" \;)
-            fi
+          for r in results results@offline results@podman; do
+            [ -d "$r/$ARM" ] || continue
+            o="out/$LABEL${r#results}"
+            for d in "$r/$ARM"/*/; do
+              p=$(basename "$d")
+              [ -f "$d/manifest.dcf" ] || continue
+              mkdir -p "$o/$p"
+              cp "$d/manifest.dcf" "$d/console.log" "$o/$p/"
+              if [ -d "$d/$p.Rcheck" ]; then
+                mkdir -p "$o/$p/$p.Rcheck"
+                (cd "$d/$p.Rcheck" && find . -maxdepth 2 \( -name '00check.log' -o -name '00install.out' \
+                   -o -name '*.Rout' -o -name '*.Rout.fail' -o -name '*.Rout.save' -o -name '*-Ex.Rout' \) \
+                   -exec cp --parents {} "$GITHUB_WORKSPACE/$o/$p/$p.Rcheck/" \;)
+              fi
+            done
           done
           cp build.log "out/$LABEL/" 2>/dev/null || true
-          du -sh "out/$LABEL"
+          du -sh out/*
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -300,9 +378,25 @@ jobs:
           merge-multiple: true
           path: out
 
+      - name: fetch the earlier run's results
+        if: needs.targets.outputs.baseline != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_RUN: ${{ needs.targets.outputs.baseline }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BASELINE_RUN/artifacts" --paginate \
+            --jq '.artifacts[].name' | grep '^results-' | sort -u > names.txt
+          mkdir -p baseline
+          while read -r name; do
+            rm -rf dl
+            gh run download "$BASELINE_RUN" -R "$GITHUB_REPOSITORY" -n "$name" -D dl
+            cp -Rn dl/. baseline/
+          done < names.txt
+          ls baseline
+
       - name: compare with CRAN
         run: |
-          python3 eval/report.py oracle out | tee report.md
+          python3 eval/report.py oracle out baseline | tee report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4

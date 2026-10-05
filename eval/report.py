@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Compare the arms' check results with CRAN's check logs.
 
-    report.py <oracle-dir> <results-dir> > report.md
+    report.py <oracle-dir> <results-dir> [<earlier-results-dir>] > report.md
 
 <oracle-dir> holds targets.tsv, logs/ and run.txt from the targets job.
 <results-dir> holds one directory per arm, or per arm and kernel setting
 such as blis-haswell, each with one directory per package (manifest.dcf,
-00check.log) and optional BUILD-FAILED and SKIPPED-* files.
+00check.log) and optional BUILD-FAILED and SKIPPED-* files. A directory such
+as mkl@offline holds the same checks repeated under another condition.
+<earlier-results-dir> holds the results of an earlier run to compare with.
 """
 import csv
 import os
@@ -140,12 +142,31 @@ def verdict(cran, arm, ref):
     return v
 
 
-def main(oracle, results):
-    labels = sorted(d for d in os.listdir(results) if os.path.isdir(os.path.join(results, d)))
+def same(results_a, label_a, results_b, label_b):
+    """Compare two sets of results package by package.
+
+    Returns the number of packages in both, and a line for each one whose
+    status or problems differ.
+    """
+    a_dir, b_dir = os.path.join(results_a, label_a), os.path.join(results_b, label_b)
+    both = sorted(p for p in os.listdir(a_dir)
+                  if os.path.isdir(os.path.join(a_dir, p)) and os.path.isdir(os.path.join(b_dir, p)))
+    differ = []
+    for p in both:
+        a, b = ours(results_a, label_a, p), ours(results_b, label_b, p)
+        if (a["status"], a["problems"]) != (b["status"], b["problems"]):
+            differ.append(f"{p}: {a['status']} ({short(a['problems'])}) against "
+                          f"{b['status']} ({short(b['problems'])})")
+    return len(both), differ
+
+
+def main(oracle, results, earlier=None):
+    every = sorted(d for d in os.listdir(results) if os.path.isdir(os.path.join(results, d)))
+    labels = [d for d in every if "@" not in d]
     labels.sort(key=lambda d: d != "reference")
     out = ["# Evaluation run\n"]
     run = dcf(os.path.join(oracle, "run.txt"))
-    for k in ["R-revision", "QA-revision", "CRAN-snapshot", "check_issues-Last-Modified"]:
+    for k in ["R-revision", "QA-revision", "CRAN-snapshot", "check_issues-Last-Modified", "Baseline-run"]:
         if k in run:
             out.append(f"- {k}: {run[k]}")
     built = [f"{d} {'NO' if os.path.exists(os.path.join(results, d, 'BUILD-FAILED')) else 'yes'}"
@@ -201,6 +222,34 @@ def main(oracle, results):
             out.append(f"| {p} | " + " | ".join(cells) + " |")
         out.append("")
 
+    repeats = [d for d in every if "@" in d and d.split("@")[0] in labels]
+    if repeats:
+        out.append("## The same image under other conditions\n")
+        out.append("| Arm | Condition | Packages | Same result | Different |")
+        out.append("|---|---|---|---|---|")
+        notes = []
+        for d in repeats:
+            base, condition = d.split("@", 1)
+            n, differ = same(results, base, results, d)
+            out.append(f"| {base} | {condition} | {n} | {n - len(differ)} | {len(differ)} |")
+            notes += [f"- {base}, {condition}, {line}" for line in differ]
+        out.append("")
+        out.extend(notes + [""] if notes else [])
+
+    if earlier and os.path.isdir(earlier):
+        out.append(f"## Against the earlier run {run.get('Baseline-run', '')}\n".replace(" \n", "\n"))
+        out.append("| Arm | Packages in both | Same result | Different |")
+        out.append("|---|---|---|---|")
+        notes = []
+        for d in labels:
+            if not os.path.isdir(os.path.join(earlier, d)):
+                continue
+            n, differ = same(results, d, earlier, d)
+            out.append(f"| {d} | {n} | {n - len(differ)} | {len(differ)} |")
+            notes += [f"- {d}, {line}" for line in differ]
+        out.append("")
+        out.extend(notes + [""] if notes else [])
+
     for d in labels:
         path = os.path.join(results, d)
         failed = os.path.join(path, "BUILD-FAILED")
@@ -218,4 +267,4 @@ def main(oracle, results):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    main(*sys.argv[1:4])

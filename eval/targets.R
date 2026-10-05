@@ -1,4 +1,4 @@
-# Pick CRAN's current BLAS and clang23 check issues out of check_issues.rds
+# Pick the kinds of CRAN check issues the arms cover out of check_issues.rds
 # and write targets.tsv, one row per package and kind, with the arm that
 # matches the kind and the local file names for CRAN's logs.
 #
@@ -9,8 +9,10 @@
 args <- commandArgs(trailingOnly = TRUE)
 rds <- if (length(args)) args[[1]] else "check_issues.rds"
 
+# donttest has no arm of its own. Its packages are checked in the reference
+# arm with the \donttest examples switched on.
 arms <- c(OpenBLAS = "openblas", MKL = "mkl", BLIS = "blis", ATLAS = "atlas",
-          clang23 = "clang23")
+          clang23 = "clang23", noLD = "nold", donttest = "donttest")
 kinds <- strsplit(Sys.getenv("KINDS", paste(names(arms), collapse = " ")), " +")[[1]]
 x <- readRDS(rds)
 x <- x[x$kind %in% intersect(names(arms), kinds), c("Package", "Version", "kind", "href")]
