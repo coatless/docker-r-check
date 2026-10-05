@@ -24,6 +24,8 @@
 #                        makes two runs install the same versions.
 #   OPENBLAS_CORETYPE    pins the OpenBLAS kernel.
 #   BLIS_ARCH_TYPE       pins the BLIS kernel set, for example haswell.
+#   MKL_*                MKL settings such as MKL_CBWR=COMPATIBLE are passed
+#                        on. MKL also picks its code from the CPU.
 #   RCC_NETWORK=none     runs the check with the network cut off. Use it with
 #                        RCC_LIBRARY_CACHE=1 after a run that installed the
 #                        dependencies.
@@ -94,8 +96,11 @@ env_args=()
 [ -n "${OPENBLAS_CORETYPE:-}" ] && env_args+=(-e "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE")
 [ -n "${BLIS_ARCH_TYPE:-}" ] && env_args+=(-e "BLIS_ARCH_TYPE=$BLIS_ARCH_TYPE")
 [ -n "${MAKEFLAGS:-}" ] && env_args+=(-e "MAKEFLAGS=$MAKEFLAGS")
-# R CMD check settings such as _R_CHECK_ELAPSED_TIMEOUT_ pass straight through.
-for v in $(env | sed -n 's/^\(_R_CHECK_[A-Z0-9_]*\)=.*/\1/p'); do env_args+=(-e "$v"); done
+# R CMD check settings such as _R_CHECK_ELAPSED_TIMEOUT_ pass straight through,
+# and so do MKL's own settings.
+for v in $(env | sed -n 's/^\(_R_CHECK_[A-Z0-9_]*\)=.*/\1/p; s/^\(MKL_[A-Z0-9_]*\)=.*/\1/p'); do
+    env_args+=(-e "$v")
+done
 
 net_args=()
 [ -n "${RCC_NETWORK:-}" ] && net_args=(--network "$RCC_NETWORK")
@@ -161,13 +166,14 @@ echo "   container exited $rc after $((t / 60))m$((t % 60))s"
 image_id="$("$ENGINE" inspect --format '{{.Image}}' "$name" 2>/dev/null)" ||
     image_id="$("$ENGINE" image inspect --format '{{.Id}}' "$(image "$fl")")"
 
-# OpenBLAS and BLIS pick their kernels at startup from the CPU, so record
-# the kernel for this run.
+# OpenBLAS, BLIS and MKL pick their code at startup from the CPU, so record
+# what they picked for this run.
 probe="$("$ENGINE" run --rm --platform "$PLATFORM" -e OPENBLAS_VERBOSE=2 -e BLIS_ARCH_DEBUG=1 \
+    -e MKL_VERBOSE=1 \
     ${env_args[@]+"${env_args[@]}"} --entrypoint sh "$image_id" -c '
     echo "cpu: $(sed -n "s/^model name[[:space:]]*: //p" /proc/cpuinfo | head -n 1)"
     /build/bin/Rscript --vanilla -e "invisible(crossprod(matrix(1, 2, 2)))" 2>&1 |
-        sed -n "s/^Core: /openblas_core: /p; s/^libblis: selecting sub-configuration /blis_arch: /p"' 2>/dev/null || true)"
+        sed -n "s/^Core: /openblas_core: /p; s/^libblis: selecting sub-configuration /blis_arch: /p; s/^MKL_VERBOSE .* architecture \\(.*\\), Lnx.*/mkl_code: \\1/p"' 2>/dev/null || true)"
 
 worst=0
 for tb in "${tarballs[@]}"; do
@@ -188,7 +194,7 @@ for tb in "${tarballs[@]}"; do
         echo "Image-Content: $content"
         echo "Platform: $PLATFORM"
         echo "Host: $(uname -s) $(uname -m)"
-        printf '%s\n' "$probe" | sed -n 's/^cpu: /CPU: /p; s/^openblas_core: /OpenBLAS-Core: /p; s/^blis_arch: /BLIS-Arch: /p'
+        printf '%s\n' "$probe" | sed -n 's/^cpu: /CPU: /p; s/^openblas_core: /OpenBLAS-Core: /p; s/^blis_arch: /BLIS-Arch: /p; s/^mkl_code: /MKL-Code: /p'
         echo "OpenBLAS-Coretype-Pinned: ${OPENBLAS_CORETYPE:-no}"
         echo "BLIS-Arch-Type-Pinned: ${BLIS_ARCH_TYPE:-no}"
         echo "Mode: $mode"
