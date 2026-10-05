@@ -5,22 +5,25 @@ name: evaluate
 # packages in every arm. All arms use the same R and QA revisions and the
 # same dated CRAN snapshot, and the report compares the results with CRAN's
 # own logs.
+#
+# A run takes hours, so it starts only when the branch `evaluate` is pushed,
+# for example with `git push origin HEAD:evaluate`. eval/run.env says which
+# kinds and jobs to run.
 
 on:
   push:
-    branches: [more-arms]
-    paths: [.github/workflows/evaluate.yml, eval/**]
+    branches: [evaluate]
   workflow_dispatch:
+    inputs:
+      kinds:
+        description: CRAN issue kinds to run, in place of KINDS in eval/run.env
+      only:
+        description: Job labels to run, in place of ONLY in eval/run.env
 
 permissions:
   contents: read
 
 env:
-  # CRAN issue kinds to run. The arms are chosen from the kinds that have
-  # packages listed today.
-  KINDS: BLIS
-  # Limit a run to these job labels, or label#shard. Empty runs every job.
-  ONLY: blis-fedora-zen3 blis-fedora-haswell blis-fedora-skx
   # Small packages of different kinds: C, more C, Fortran, C calling the
   # BLAS, saved test output that depends on the BLAS, and knitr vignettes.
   OTHER_PACKAGES: base64enc digest quadprog irlba maxLik jsonlite
@@ -35,6 +38,17 @@ jobs:
       matrix: ${{ steps.arms.outputs.matrix }}
     steps:
       - uses: actions/checkout@v5
+
+      - name: read what to run
+        env:
+          IN_KINDS: ${{ inputs.kinds }}
+          IN_ONLY: ${{ inputs.only }}
+        run: |
+          . eval/run.env
+          {
+            echo "KINDS=${IN_KINDS:-$KINDS}"
+            echo "ONLY=${IN_ONLY:-$ONLY}"
+          } | tee -a "$GITHUB_ENV"
 
       - name: pin the revisions and the snapshot for every arm
         id: pin
