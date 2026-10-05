@@ -152,6 +152,11 @@ jobs:
           FLAVOUR: ${{ matrix.flavour }}
         run: |
           set -o pipefail
+          # Some runners are shut down near the end of this step. Log memory
+          # and disk while it runs to see what they look like just before.
+          ( while sleep 20; do
+              echo "[monitor $(date -u +%H:%M:%S)] $(free -m | awk '/^Mem/ {print "mem used " $3 " MiB, free " $4 ", cache " $6 ", available " $7}'); $(df -h / | awk 'NR==2 {print "disk avail " $4}'); load $(cut -d' ' -f1 /proc/loadavg)"
+            done ) &
           cd docker
           # shellcheck disable=SC1090 # the arm file names its Debian suite
           suite=$(. "flavours/$FLAVOUR.env" && echo "$RCC_DEBIAN_TAG")
@@ -164,7 +169,7 @@ jobs:
             --build-arg MAKEFLAGS=-j4 \
             --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --target standalone \
-            -t "rcc-standalone:$FLAVOUR" . 2>&1 | tail -300
+            -t "rcc-standalone:$FLAVOUR" . 2>&1 | grep --line-buffered -E '^#[0-9]+ (\[|DONE|ERROR|exporting|writing|naming)|fetch-recommended|^ERROR' 
           echo "built=1" >> "$GITHUB_OUTPUT"
 
       - name: what did we actually get
