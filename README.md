@@ -1,13 +1,13 @@
 # r-check-containers
 
-These containers rerun CRAN's additional BLAS and clang checks on your own
-machine.
+These containers rerun several of CRAN's additional checks on your own
+machine, among them the BLAS, clang 23, noLD and donttest checks.
 
 Each image is called an *arm*. An arm is R-devel built with `build-R` and
 `Rconf` from the [CRAN QA tree][qa-tree], on a Debian base that gets its
 system libraries from AASC's [`rcheckserver`][aasc]. An arm differs from the
-`reference` arm in the BLAS, the compilers or the Debian release, so a
-difference in a check result can be traced to that change.
+`reference` arm in the BLAS, the compilers, a configure option or the Debian
+release, so a difference in a check result can be traced to that change.
 
 This is a fork of Simon Urbanek's [docker-r-check][docker-r-check]. His
 build-and-mount workflow, described in [README](README), works as before. The
@@ -25,12 +25,13 @@ flowchart BT
     build --> reference
     build --> blas
     build --> clang23
+    build --> nold
     build --> forky
 ```
 
 ## Arms
 
-There are eight arms. Each one changes a single thing against `reference`,
+There are nine arms. Each one changes a single thing against `reference`,
 except `blisfedora`, which also needs a newer Debian for its BLIS.
 
 | Arm | What it changes | Passed to `Rconf` |
@@ -42,9 +43,10 @@ except `blisfedora`, which also needs a newer Debian for its BLIS.
 | `blis` | Serial BLIS 2.1, with Debian's LAPACK 3.12.1 | `--with-blas=-lblas --with-lapack=-llapack` |
 | `blisfedora` | The BLIS binary from Fedora's `blis-2.0-5` package, which is the one CRAN uses, on Debian forky | `--with-blas=-lblas --with-lapack=-llapack` |
 | `clang23` | clang 23 and flang 23, with libc++ | `-fc/23 -bi` |
+| `nold` | R built without long double | `-bi --disable-long-double` |
 | `forky` | Debian forky, which has glibc 2.43 | `-bi` |
 
-`reference` is the control. All eight build on GitHub's x86 runners, and the
+`reference` is the control. All nine build on GitHub's x86 runners, and the
 first three also build on a Mac under Rosetta. A build fails unless R reports
 the BLAS the arm is named for, so an image cannot carry a different BLAS than
 its name says.
@@ -60,9 +62,10 @@ table(x$kind)
 
 ## How the arms compare with CRAN
 
-A workflow checks every package on CRAN's current BLAS and clang23 lists in
-the arm that matches its list and in `reference`, then compares each result
-with CRAN's own log. On 2026-10-04 that was 109 packages.
+A workflow checks every package on six of CRAN's current lists in the arm
+that matches its list, with `reference` as the control, then compares each
+result with CRAN's own log. On 2026-10-04 and 2026-10-05 that was 298
+packages.
 
 | CRAN's list | Packages | What the arms showed |
 |---|---|---|
@@ -70,9 +73,32 @@ with CRAN's own log. On 2026-10-04 that was 109 packages.
 | BLIS | 6 | Four appear with Fedora's binary and two with Debian's BLIS. Which ones depends on the kernels BLIS uses for the CPU. |
 | OpenBLAS | 3 | All three failed at CRAN on a web request, which is not an OpenBLAS problem. |
 | clang23 | 97 | Three packages fail to compile, with the same compiler error as at CRAN. 83 pass, mostly because `duckdb`, which they need, builds again. |
+| noLD | 5 | Three fail their tests in `nold` as at CRAN and pass in `reference`. |
+| donttest | 184 | 157 show the failing `\donttest` examples CRAN reports, 134 of them with exactly CRAN's set of problems. These run in `reference` with the examples switched on. |
 
 Pushing a branch named `evaluate` starts a run, and `eval/run.env` says which
 lists it covers. A full run keeps GitHub's runners busy for several hours.
+
+## Repeating the checks
+
+A run can also repeat its checks under other conditions and compare. On
+2026-10-05 five arms repeated 57 package checks three ways, with the R
+revision and the CRAN snapshot of the run a day before.
+
+| Repeated | Same result | What differed |
+|---|---|---|
+| Under rootless Podman, same image | 56 of 57 | One vignette that could not reach a web service |
+| With the network cut off | 44 of 57 | Five packages whose examples, tests or vignettes download something |
+| A day later, on other runners | 55 of 57 | One download that worked this time, and `irlba` under MKL, which failed on an AMD CPU and had passed on an Intel one |
+
+The checks themselves need no network once the dependencies are installed.
+
+By default the image checks one package at a time with the QA tree's
+`check_CRAN_incoming`. With `RCC_RUNNER=dir` it uses the newer
+`check-CRAN-incoming` from the same tree, which is built on
+`tools::check_packages_in_dir()` and checks several packages at once. On 16
+packages in `reference` the two gave the same results. The second took 15
+minutes on four cores where the first took 96, dependencies included.
 
 ## One package in two arms
 
@@ -174,10 +200,13 @@ A few environment variables change how the scripts behave.
 |---|---|
 | `RCC_MODE=regular` | The default. A plain `R CMD check`, like the runs behind CRAN's additional issues. |
 | `RCC_MODE=incoming` | `R CMD check --as-cran` with the incoming checks a new submission gets. Needs a live CRAN mirror. |
+| `RCC_RUNNER=dir` | Checks through `tools::check_packages_in_dir()`, several packages at a time. `RCC_NCPUS` says how many, and the default is one per core. |
 | `CRAN_MIRROR` | Where dependencies come from. A dated [snapshot][p3m] makes two runs install the same versions. |
 | `OPENBLAS_CORETYPE` | Pins the OpenBLAS kernel, the CPU-specific code it runs. |
 | `BLIS_ARCH_TYPE` | Pins the BLIS kernel set in the same way, for example `haswell`. |
 | `RCC_LIBRARY_CACHE=1` | Keeps installed dependencies in a Docker volume so the next run skips compiling them. |
+| `RCC_NETWORK=none` | Cuts the network off during the check. Use it after a run with `RCC_LIBRARY_CACHE=1` has installed the dependencies. |
+| `RCC_ENGINE=podman` | Runs the scripts with Podman in place of Docker. |
 | `RCC_COMPARE_ONLY=1` | Makes `04-compare.sh` compare earlier results without running the checks again. |
 | `R_SVN_REV`, `QA_SVN_REV`, `RCC_JOBS` | The pinned revisions and the `make -j` level for `01-build.sh`. |
 
@@ -239,11 +268,12 @@ docker run --platform linux/amd64 --name chk \
 docker cp chk:/build/CRAN/mypkg.Rcheck ./ && docker rm chk
 ```
 
-Arguments after the image name go to `check_CRAN_incoming`. Results are in
-`/build/CRAN/<pkg>.Rcheck` inside the container. Do not mount anything over
-`/build`, because R is installed there in the `standalone` image. Pass
-`DEBIAN_TAG=trixie` explicitly, because the Dockerfile defaults to
-`unstable`.
+Arguments after the image name go to `check_CRAN_incoming`. Add
+`-e RCC_RUNNER=dir` to check through `tools::check_packages_in_dir()`.
+Results are in `/build/CRAN/<pkg>.Rcheck` inside the container. Do not mount
+anything over `/build`, because R is installed there in the `standalone`
+image. Pass `DEBIAN_TAG=trixie` explicitly, because the Dockerfile defaults
+to `unstable`.
 
 ## Tests and CI
 
@@ -279,10 +309,18 @@ for incoming submissions. CRAN's BLAS checks run on Fedora with a different
 locale, time zone and compiler. A result can therefore differ from CRAN's for
 reasons unrelated to the BLAS, so I compare arms with each other first.
 
-OpenBLAS and BLIS pick their kernels from the CPU, and the results change
-with them. With Fedora's BLIS binary, `irlba` fails with one kernel set and
+OpenBLAS, BLIS and MKL pick their code from the CPU, and the results change
+with it. With Fedora's BLIS binary, `irlba` fails with one kernel set and
 `lmeInfo` with another. GitHub's runners are a mix of AMD and Intel machines,
-so the comparison pins the kernel set and records the CPU for every run.
+so the comparison pins the OpenBLAS and BLIS kernels and records the CPU for
+every run. MKL has no such pin. Under MKL `irlba` failed its tests on the AMD
+runners and passed on an Intel one. It also passes on AMD with
+`MKL_CBWR=COMPATIBLE`, a setting the check script passes on, though that is
+not the code CRAN's MKL machine runs.
+
+The checks install dependencies from CRAN and Bioconductor only. A package
+that needs one from another repository, such as `cmdstanr`, stops at the
+dependency step.
 
 `blisfedora` is not a pure Debian arm. It loads a Fedora binary that needs
 glibc 2.43, so it builds on Debian forky. I keep it because it shows which of
