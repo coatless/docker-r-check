@@ -92,4 +92,18 @@ mkdir -p Library
 ## install those
 R_LIBS=$HOME/tmp/CRAN/Library MAKEFLAGS=-j6 /build/bin/Rscript -e 'p=c("curl","xml2"); i=p[!p %in% rownames(installed.packages())]; if(length(i)) install.packages(i)'
 
+## RCC_RUNNER=dir checks through tools::check_packages_in_dir(), using the QA
+## tree's newer check-CRAN-incoming, with several packages at a time. -r keeps
+## the meaning it has for check_CRAN_incoming, a check without the incoming
+## checks. The script's first line names /usr/bin/Rscript, so run it with ours.
+if [ "${RCC_RUNNER}" = dir ]; then
+    runner_args="-n -N=${RCC_NCPUS:-$(nproc)}"
+    case " $* " in
+	*" -r "*) export _R_CHECK_CRAN_INCOMING_=false ;;
+	*) runner_args="$runner_args -c" ;;
+    esac
+    exec /build/bin/Rscript --default-packages=NULL ~/bin/check-CRAN-incoming \
+	 --exe /build/bin/R $runner_args
+fi
+
 check_CRAN_incoming -n "$@"

@@ -26,6 +26,10 @@
 #   BLIS_ARCH_TYPE       pins the BLIS kernel set, for example haswell.
 #   MKL_*                MKL settings such as MKL_CBWR=COMPATIBLE are passed
 #                        on. MKL also picks its code from the CPU.
+#   RCC_RUNNER=dir       checks through tools::check_packages_in_dir(), with
+#                        check-CRAN-incoming from the QA tree. It checks
+#                        RCC_NCPUS packages at a time, by default one per
+#                        core.
 #   RCC_NETWORK=none     runs the check with the network cut off. Use it with
 #                        RCC_LIBRARY_CACHE=1 after a run that installed the
 #                        dependencies.
@@ -92,6 +96,15 @@ cp "${tarballs[@]}" "$stage/"
 chmod 0755 "$stage"; chmod 0644 "$stage"/*.tar.gz
 
 env_args=()
+runner="${RCC_RUNNER:-}"
+case "$runner" in
+"")  runner_desc="check_CRAN_incoming, one package at a time" ;;
+dir) runner_desc="tools::check_packages_in_dir(), ${RCC_NCPUS:-one per core} at a time"
+     env_args+=(-e RCC_RUNNER=dir)
+     [ -n "${RCC_NCPUS:-}" ] && env_args+=(-e "RCC_NCPUS=$RCC_NCPUS") ;;
+*)   die "RCC_RUNNER must be 'dir' or unset, not '$runner'" ;;
+esac
+
 [ -n "${CRAN_MIRROR:-}" ] && env_args+=(-e "CRAN_MIRROR=$CRAN_MIRROR")
 [ -n "${OPENBLAS_CORETYPE:-}" ] && env_args+=(-e "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE")
 [ -n "${BLIS_ARCH_TYPE:-}" ] && env_args+=(-e "BLIS_ARCH_TYPE=$BLIS_ARCH_TYPE")
@@ -198,6 +211,7 @@ for tb in "${tarballs[@]}"; do
         echo "OpenBLAS-Coretype-Pinned: ${OPENBLAS_CORETYPE:-no}"
         echo "BLIS-Arch-Type-Pinned: ${BLIS_ARCH_TYPE:-no}"
         echo "Mode: $mode"
+        echo "Runner: $runner_desc"
         echo "Engine: $ENGINE"
         echo "Network: ${RCC_NETWORK:-on}"
         echo "CRAN-Mirror: ${CRAN_MIRROR:-https://cloud.r-project.org (live, unpinned)}"
@@ -220,6 +234,9 @@ mkdir -p "$out/log"
 "$ENGINE" cp "$name:/build/log/." "$out/log/.tmp" >/dev/null 2>&1 || true
 find "$out/log/.tmp" -maxdepth 1 -name 'CRAN_*.log' -exec mv {} "$out/log/" \; 2>/dev/null || true
 rm -rf "$out/log/.tmp"
+# check_packages_in_dir() keeps each dependency's install log and each check's
+# output in Outputs/.
+[ "$runner" != dir ] || "$ENGINE" cp "$name:/build/CRAN/Outputs" "$out/log/" >/dev/null 2>&1 || true
 
 echo "   results: $out/<package>/  (manifest.dcf, console.log, <package>.Rcheck/)"
 exit "$worst"
