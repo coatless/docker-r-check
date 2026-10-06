@@ -64,11 +64,13 @@ ARG QA_SVN_REV=
 
 ## prepare sources if not mounted so we can cache long pulls (mostly relevant to remote places like NZ ;))
 ## The recommended packages come over HTTPS, with rsync as the fallback,
-## because CRAN's rsync server limits its connections.
+## because CRAN's rsync server limits its connections. The SVN server refuses
+## a connection now and then, so a checkout is tried up to four times.
 COPY fetch-recommended.sh /opt/rcheck/fetch-recommended.sh
 RUN mkdir -p /src && \
-    svn co ${QA_SVN_REV:+-r ${QA_SVN_REV}} https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt /src/QA && \
-    svn co ${R_SVN_REV:+-r ${R_SVN_REV}} https://svn.r-project.org/R/trunk /src/R && ( sh /opt/rcheck/fetch-recommended.sh /src/R || ( cd /src/R && tools/rsync-recommended ) ) && \
+    co() { n=0; until svn co ${3:+-r "$3"} "$1" "$2"; do n=$((n + 1)); [ "$n" -lt 4 ] || return 1; svn cleanup "$2" 2>/dev/null || true; sleep $((n * 30)); done; } && \
+    co https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt /src/QA "${QA_SVN_REV}" && \
+    co https://svn.r-project.org/R/trunk /src/R "${R_SVN_REV}" && ( sh /opt/rcheck/fetch-recommended.sh /src/R || ( cd /src/R && tools/rsync-recommended ) ) && \
     ( cd /src/R && svn info --show-item revision > /etc/rcheck-r-svn-rev ) && \
     ( cd /src/QA && svn info --show-item revision > /etc/rcheck-qa-svn-rev ) && \
     chown -R rbuild:rbuild /src
