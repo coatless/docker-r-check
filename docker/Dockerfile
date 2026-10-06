@@ -130,9 +130,11 @@ RUN set -eu; \
 
 ## Check that R runs, that the BLAS selection is still in place, that R
 ## itself loads the arm's BLAS, and that an arm built with LTO does LTO. Then
-## record what was built.
+## record what was built. Nothing in this image needs root after the build,
+## so the check user's sudo rule goes.
 USER root
 RUN set -eu; \
+    rm -f /etc/sudoers.d/10rbuild; \
     /build/bin/R --version; \
     sh /opt/rcheck/blas-wiring.sh verify "${RCC_FLAVOUR}"; \
     sh /opt/rcheck/assert-r-blas.sh "${RCC_FLAVOUR}" /build/bin/R; \

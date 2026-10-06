@@ -30,6 +30,14 @@
 #                        check-CRAN-incoming from the QA tree. It checks
 #                        RCC_NCPUS packages at a time, by default one per
 #                        core.
+#   RCC_ISOLATE=1        checks a package whose code is not trusted. A first
+#                        container installs the dependencies with the network
+#                        on, reading the package's DESCRIPTION and running
+#                        none of its code. The check then runs in a second
+#                        container with the network off, a read-only root
+#                        file system, the dependencies mounted read-only and
+#                        a memory limit, RCC_MEMORY (default 8g, 0 for none).
+#                        For regular checks only.
 #   RCC_NETWORK=none     runs the check with the network cut off. Use it with
 #                        RCC_LIBRARY_CACHE=1 after a run that installed the
 #                        dependencies.
@@ -39,6 +47,7 @@
 #                        image and mirror, so the next run skips compiling
 #                        them. List the volumes with
 #                        docker volume ls -q --filter name=rcc-lib-
+#                        With RCC_ISOLATE=1 the volumes are named rcc-deps-.
 #
 # Results go to results/<flavour>/<package>/, which holds the .Rcheck
 # directory, the console output, check_CRAN_incoming's summary, and
@@ -90,7 +99,15 @@ done
 # the tarballs asked for.
 stage="$(mktemp -d "${TMPDIR:-/tmp}/rcc-pkg.XXXXXX")"
 name="rcc-check-$fl-$$"
-cleanup() { "$ENGINE" rm -f "$name" >/dev/null 2>&1 || true; rm -rf "$stage"; }
+workvol=""; depvol=""
+cleanup() {
+    "$ENGINE" rm -f "$name" >/dev/null 2>&1 || true
+    [ -z "$workvol" ] || "$ENGINE" volume rm "$workvol" >/dev/null 2>&1 || true
+    # The dependencies of an isolated check are kept only when asked.
+    [ -z "$depvol" ] || [ "${RCC_LIBRARY_CACHE:-0}" != 0 ] ||
+        "$ENGINE" volume rm "$depvol" >/dev/null 2>&1 || true
+    rm -rf "$stage"
+}
 trap cleanup EXIT
 cp "${tarballs[@]}" "$stage/"
 chmod 0755 "$stage"; chmod 0644 "$stage"/*.tar.gz
@@ -118,6 +135,13 @@ done
 net_args=()
 [ -n "${RCC_NETWORK:-}" ] && net_args=(--network "$RCC_NETWORK")
 
+isolate="${RCC_ISOLATE:-0}"
+if [ "$isolate" != 0 ]; then
+    [ "$mode" = regular ] ||
+        die "RCC_ISOLATE=1 runs the check offline, and the incoming checks need the network"
+    [ -z "${RCC_NETWORK:-}" ] || die "RCC_ISOLATE=1 cuts the network itself; unset RCC_NETWORK"
+fi
+
 # Rootless Podman on an SELinux host cannot read an unlabeled bind mount.
 pkg_mount="$stage:/pkg:ro"
 case "$(basename "$ENGINE")" in podman*) pkg_mount="$pkg_mount,z" ;; esac
@@ -131,9 +155,9 @@ content="$("$ENGINE" image inspect --format '{{json .RootFS.Layers}}' "$(image "
 # library is keyed by the image's content and the mirror, and never shared.
 lib_args=()
 library="fresh (discarded with the container)"
-if [ "${RCC_LIBRARY_CACHE:-0}" != 0 ]; then
-    key="$(printf '%s %s' "${CRAN_MIRROR:-live}" "$content" |
-        { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)"
+key="$(printf '%s %s' "${CRAN_MIRROR:-live}" "$content" |
+    { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)"
+if [ "$isolate" = 0 ] && [ "${RCC_LIBRARY_CACHE:-0}" != 0 ]; then
     vol="rcc-lib-$fl-$key"
     # The cleanup below would delete a running check's files.
     [ -z "$("$ENGINE" ps -q --filter "volume=$vol")" ] ||
@@ -161,16 +185,56 @@ console="$out/console-$stamp.log"
 echo "== $mode check in $(image "$fl"): $(cd "$stage" && ls -- *.tar.gz | tr '\n' ' ')"
 echo "   console: $console"
 
+# The two phases of RCC_ISOLATE=1 share two volumes. One holds the library of
+# dependencies, which the check sees read-only. The other holds the check
+# directory, the only place on disk the check can write to.
+iso_args=()
+isolation="none"
+if [ "$isolate" != 0 ]; then
+    depvol="rcc-deps-$fl-$key"
+    workvol="rcc-work-$fl-$$"
+    "$ENGINE" volume inspect "$depvol" >/dev/null 2>&1 || "$ENGINE" volume create "$depvol" >/dev/null
+    "$ENGINE" volume create "$workvol" >/dev/null
+    # New volumes are owned by root.
+    "$ENGINE" run --rm --platform "$PLATFORM" --user 0 --entrypoint sh \
+        -v "$workvol:/build/CRAN" -v "$depvol:/build/CRAN/Library" "$(image "$fl")" -c \
+        'chown rbuild:rbuild /build/CRAN /build/CRAN/Library'
+    home="$("$ENGINE" run --rm --platform "$PLATFORM" --entrypoint sh "$(image "$fl")" -c 'echo "$HOME"')"
+    echo "   installing dependencies first: $out/deps-$stamp.log"
+    "$ENGINE" run --rm --platform "$PLATFORM" \
+        --security-opt no-new-privileges --cap-drop ALL --pids-limit 4096 \
+        -e RCC_PHASE=deps ${env_args[@]+"${env_args[@]}"} \
+        -v "$workvol:/build/CRAN" -v "$depvol:/build/CRAN/Library" \
+        -v "$pkg_mount" "$(image "$fl")" ${entry_args[@]+"${entry_args[@]}"} >"$out/deps-$stamp.log" 2>&1 ||
+        die "installing the dependencies failed; see $out/deps-$stamp.log"
+    memory="${RCC_MEMORY:-8g}"
+    # /tmp and the home need exec, because packages compile and load code
+    # there. A tmpfs takes the mode of the directory under it, and the home
+    # is closed to everyone but its owner, so the mode is given.
+    iso_args=(--network none --read-only
+        --tmpfs "/tmp:rw,exec,nosuid,nodev,mode=1777" --tmpfs "/var/tmp:mode=1777" --tmpfs /run
+        --tmpfs "$home:rw,exec,nosuid,nodev,mode=1777")
+    limit="no memory limit"
+    if [ "$memory" != 0 ]; then
+        iso_args+=(--memory "$memory")
+        limit="memory limit $memory"
+    fi
+    lib_args=(-v "$workvol:/build/CRAN" -v "$depvol:/build/CRAN/Library:ro")
+    library="volume $depvol, read-only during the check"
+    isolation="two containers; check offline, read-only root, $limit"
+fi
+
 # No --rm, because the results are copied out of the stopped container
-# afterwards. That works the same under Docker and Podman. The container
-# needs the network to install dependencies. It runs as the image's
-# unprivileged user, and no-new-privileges also disables the image's sudo.
+# afterwards. That works the same under Docker and Podman. Unless
+# RCC_ISOLATE=1 installed them first, the container needs the network to
+# install dependencies. It runs as the image's unprivileged user, and
+# no-new-privileges leaves it no way back to root.
 start=$SECONDS
 rc=0
 "$ENGINE" run --platform "$PLATFORM" --name "$name" \
     --security-opt no-new-privileges --cap-drop ALL --pids-limit 4096 \
     ${env_args[@]+"${env_args[@]}"} ${lib_args[@]+"${lib_args[@]}"} \
-    ${net_args[@]+"${net_args[@]}"} \
+    ${net_args[@]+"${net_args[@]}"} ${iso_args[@]+"${iso_args[@]}"} \
     -v "$pkg_mount" "$(image "$fl")" ${entry_args[@]+"${entry_args[@]}"} >"$console" 2>&1 || rc=$?
 t=$((SECONDS - start))
 echo "   container exited $rc after $((t / 60))m$((t % 60))s"
@@ -213,7 +277,8 @@ for tb in "${tarballs[@]}"; do
         echo "Mode: $mode"
         echo "Runner: $runner_desc"
         echo "Engine: $ENGINE"
-        echo "Network: ${RCC_NETWORK:-on}"
+        echo "Network: $([ "$isolate" = 0 ] && echo "${RCC_NETWORK:-on}" || echo "none during the check")"
+        echo "Isolation: $isolation"
         echo "CRAN-Mirror: ${CRAN_MIRROR:-https://cloud.r-project.org (live, unpinned)}"
         echo "Library: $library"
         echo "Started: $stamp"

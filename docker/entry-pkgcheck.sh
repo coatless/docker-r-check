@@ -54,9 +54,15 @@ if [ ! -e /data/Repositories ]; then
     ## there is a lot of stuff in the regular Rprofile that is local, so we replace it
     ## with a smaller version - FIXME: it would be nice to decouple the local and global parts
     echo "local({ utils::setRepositories(FALSE,1:4); r=getOption('repos'); r[1]='${CRAN_MIRROR}'; options(repos=r) })" > ~/.R/Rprofile
-    ## we also need a site version of this
+    ## we also need a site version of this. With a read-only root file system
+    ## it cannot go into R's own etc/, so R is pointed at a copy in the home.
     if [ ! -e /build/etc/Rprofile.site ]; then
-	echo "local({ utils::setRepositories(FALSE,1:4); r=getOption('repos'); r[1]='${CRAN_MIRROR}'; options(repos=r) })" > /build/etc/Rprofile.site
+	site=/build/etc/Rprofile.site
+	if [ ! -w /build/etc ]; then
+	    site=~/.R/Rprofile.site
+	    export R_PROFILE="$site"
+	fi
+	echo "local({ utils::setRepositories(FALSE,1:4); r=getOption('repos'); r[1]='${CRAN_MIRROR}'; options(repos=r) })" > "$site"
     fi
     ## the last part of Rprofile in QA
     cat << 'EOF' >> ~/.R/Rprofile
@@ -91,6 +97,16 @@ mkdir -p Library
 ## but they are not auto-installed. So until that is fixed, we have to manually
 ## install those
 R_LIBS=$HOME/tmp/CRAN/Library MAKEFLAGS=-j6 /build/bin/Rscript -e 'p=c("curl","xml2"); i=p[!p %in% rownames(installed.packages())]; if(length(i)) install.packages(i)'
+
+## RCC_PHASE=deps stops here, after installing what the packages need with
+## the QA tree's install.R. That reads each DESCRIPTION and runs none of the
+## packages' own code, so the check itself can then run in a second container
+## with the network cut off.
+if [ "${RCC_PHASE}" = deps ]; then
+    R_LIBS=$HOME/tmp/CRAN/Library /build/bin/R --no-save --no-restore --slave \
+	  --args *.tar.gz < ~/lib/R/Scripts/install.R
+    exit 0
+fi
 
 ## RCC_RUNNER=dir checks through tools::check_packages_in_dir(), using the QA
 ## tree's newer check-CRAN-incoming, with several packages at a time. -r keeps

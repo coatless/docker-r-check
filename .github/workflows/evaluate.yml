@@ -320,6 +320,20 @@ jobs:
           RCC_RESULTS="$PWD/results@dir" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
             echo "03-check.sh exited $?"
 
+      - name: repeat the checks in two containers, the second cut off
+        if: env.SKIP != '1' && contains(env.CONDITIONS, 'isolated')
+        env:
+          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
+          RCC_MODE: regular
+          OPENBLAS_CORETYPE: Haswell
+          _R_CHECK_ELAPSED_TIMEOUT_: 3600
+          RCC_ISOLATE: 1
+        run: |
+          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
+          # shellcheck disable=SC2046
+          RCC_RESULTS="$PWD/results@isolated" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
+            echo "03-check.sh exited $?"
+
       - name: repeat the checks with the network cut off
         if: env.SKIP != '1' && contains(env.CONDITIONS, 'offline')
         env:
@@ -356,7 +370,7 @@ jobs:
       - name: keep the logs
         if: always()
         run: |
-          for r in results results@dir results@offline results@podman; do
+          for r in results results@dir results@isolated results@offline results@podman; do
             [ -d "$r/$ARM" ] || continue
             o="out/$LABEL${r#results}"
             for d in "$r/$ARM"/*/; do
