@@ -262,11 +262,12 @@ jobs:
           _R_CHECK_ELAPSED_TIMEOUT_: 3600
         run: |
           # reference is the control for every BLAS and noLD issue, and for the
-          # clang23 packages that fail to install at CRAN.
+          # clang23 packages that fail to install at CRAN. An LTO warning needs
+          # an LTO build, so those packages have no control.
           case "$LABEL" in
           reference)
             targets=$(tail -n +2 oracle/targets.tsv |
-              awk -F'\t' '($5 != "clang23" && $5 != "donttest") || $7 != "-" {print $1}') ;;
+              awk -F'\t' '($5 != "clang23" && $5 != "donttest" && $5 != "lto") || $7 != "-" {print $1}') ;;
           *)
             targets=$(tail -n +2 oracle/targets.tsv |
               awk -F'\t' -v a="$TARGETS" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1}') ;;
@@ -277,8 +278,14 @@ jobs:
           # The package lists are split on purpose here and below.
           # shellcheck disable=SC2086
           for p in $(printf '%s\n' $targets $OTHER_PACKAGES | awk '!seen[$0]++'); do
+            # A package that has left CRAN is checked from CRAN's archive, at
+            # the version CRAN's log is for.
+            v=$(awk -F'\t' -v p="$p" '$1 == p {print $2; exit}' oracle/targets.tsv)
             if grep -qx "Package: $p" PACKAGES; then
               pkgs="$pkgs $p"
+            elif [ -n "$v" ] && curl -fsSL --create-dirs -o "archive/${p}_$v.tar.gz" \
+                   "https://cloud.r-project.org/src/contrib/Archive/$p/${p}_$v.tar.gz"; then
+              pkgs="$pkgs archive/${p}_$v.tar.gz"
             else
               echo "$p is not in the $SNAPSHOT snapshot, so it was not checked" | tee -a "out/$LABEL/SKIPPED-$SHARD"
             fi

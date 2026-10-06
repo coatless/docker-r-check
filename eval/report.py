@@ -6,7 +6,7 @@
 <oracle-dir> holds targets.tsv, logs/ and run.txt from the targets job.
 <results-dir> holds one directory per arm, or per arm and kernel setting
 such as blis-haswell, each with one directory per package (manifest.dcf,
-00check.log) and optional BUILD-FAILED and SKIPPED-* files. A directory such
+00check.log, 00install.out) and optional BUILD-FAILED and SKIPPED-* files. A directory such
 as mkl@offline holds the same checks repeated under another condition.
 <earlier-results-dir> holds the results of an earlier run to compare with.
 """
@@ -22,6 +22,10 @@ QUOTED = re.compile(r"\s*[‘'][^’']*[’']")
 MISSING = re.compile(r"Packages? (?:required|suggested) but not available:?((?:\s*[‘'][^’']+[’'],?)+)")
 COMPARING = re.compile(r"^\s*Comparing [‘']([^’']+)[’'] to [‘'][^’']+[’'] \.\.\.(.*)$")
 FAILED = re.compile(r"^Running the tests in [‘']tests/([^’']+)[’'] failed")
+# A link-time warning about one symbol, as GCC prints it.
+LTO = re.compile(r"warning: (?:type of |type )?[‘']([^’']+)[’'] "
+                 r"(?:does not match original declaration|violates the C\+\+ One Definition Rule) "
+                 r"\[-W(lto-type-mismatch|odr)\]")
 
 
 def problems(path):
@@ -77,6 +81,20 @@ def problems(path):
     return found
 
 
+def lto_warnings(path):
+    """Map each symbol with an LTO warning in an install log to the warning.
+
+    CRAN's LTO logs are install logs, so an LTO issue is compared by the
+    symbols the linker complains about, not by check steps.
+    """
+    try:
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return None
+    kinds = {"lto-type-mismatch": "type mismatch", "odr": "ODR"}
+    return {m.group(1): kinds[m.group(2)] for m in LTO.finditer(text)}
+
+
 def first_error(path):
     """The first compiler error in an install log, or None."""
     try:
@@ -100,21 +118,36 @@ def dcf(path):
     return out
 
 
-def ours(results, label, pkg):
+def ours(results, label, pkg, kind=None):
     d = os.path.join(results, label, pkg)
     if not os.path.isdir(d):
         return None
     m = dcf(os.path.join(d, "manifest.dcf"))
     found = problems(os.path.join(d, pkg + ".Rcheck", "00check.log"))
+    then_failed = False
+    if kind == "LTO":
+        # The LTO warnings are in the install log, and they count even when
+        # the package fails to load afterwards. A package that did not get
+        # as far as linking keeps the step that stopped it.
+        stopped = {k: v for k, v in (found or {}).items() if v.startswith("ERROR")
+                   and k in ("package dependencies", "whether package can be installed")}
+        warned = lto_warnings(os.path.join(d, pkg + ".Rcheck", "00install.out"))
+        found = warned or stopped
+        then_failed = bool(warned and stopped)
     return {
         "status": m.get("Status", "did not complete"),
         "problems": found or {},
         "tarball": m.get("Tarball", ""),
+        "then_failed": then_failed,
     }
 
 
-def short(p):
-    return "; ".join(f"{k}: {v}" for k, v in sorted(p.items())) if p else "OK"
+def short(p, most=None):
+    """One line for a set of problems, naming at most `most` of them."""
+    items = [f"{k}: {v}" for k, v in sorted(p.items())]
+    if most and len(items) > most:
+        items = items[:most] + [f"and {len(items) - most} more"]
+    return "; ".join(items) if items else "OK"
 
 
 def verdict(cran, arm, ref):
@@ -181,24 +214,29 @@ def main(oracle, results, earlier=None):
     issues, errors, tally = [], [], {}
     for t in targets:
         pkg, arm = t["Package"], t["arm"]
-        cran = problems(os.path.join(oracle, t["log"]))
+        lto = t["kind"] == "LTO"
+        cran = (lto_warnings if lto else problems)(os.path.join(oracle, t["log"]))
         if cran is None:
             issues.append(f"{pkg} ({t['kind']}): CRAN's log could not be fetched")
             cran = {}
-        ref = ours(results, "reference", pkg)
+        ref = None if lto else ours(results, "reference", pkg)
+        most = 3 if lto else None
         variants = [d for d in labels if d == arm or d.startswith(arm + "-")] or [arm]
         for label in variants:
-            a = ours(results, label, pkg)
+            a = ours(results, label, pkg, t["kind"])
             v = verdict(cran, a, ref)
+            if a and a["then_failed"]:
+                v += ", but the install failed afterwards"
             tally.setdefault(label, {}).setdefault(re.split(", (?:all|part) of it", v)[0], []).append(pkg)
             if a and t["Version"] not in a["tarball"]:
                 issues.append(f"{pkg}: CRAN checked {t['Version']}, {label} checked {a['tarball']}")
-            out.append(f"| {pkg} {t['Version']} | {t['kind']} | {label} | {short(cran)} | "
-                       f"{short(a['problems']) if a else '-'} | {short(ref['problems']) if ref else '-'} | {v} |")
+            out.append(f"| {pkg} {t['Version']} | {t['kind']} | {label} | {short(cran, most)} | "
+                       f"{short(a['problems'], most) if a else '-'} | "
+                       f"{short(ref['problems']) if ref else '-'} | {v} |")
             theirs = first_error(os.path.join(oracle, t["log"][:-4] + ".install.log"))
             mine = first_error(os.path.join(results, label, pkg, pkg + ".Rcheck", "00install.out"))
             if theirs or mine:
-                errors.append(f"- {pkg} ({label}): CRAN `{theirs or 'no install log kept'}`, "
+                errors.append(f"- {pkg} ({label}): CRAN `{theirs or ('installed' if lto else 'no install log kept')}`, "
                               f"arm `{mine or ('installed' if a else 'not checked')}`")
     out.append("")
     out.append("Counts per arm\n")
