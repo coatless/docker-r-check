@@ -26,7 +26,7 @@ jobs:
       matrix:
         # One container per suite, so neither test sees packages the other
         # installed.
-        suite: [blas-wiring-test.sh, flavour-test.sh]
+        suite: [blas-wiring-test.sh, flavour-test.sh, lto-assert-test.sh]
     steps:
       - name: tools
         run: |
@@ -39,7 +39,7 @@ jobs:
         if: matrix.suite == 'blas-wiring-test.sh'
         run: |
           sh tests/lint-flavours.sh
-          shellcheck -S warning docker/blas-wiring.sh docker/flavour-setup.sh
+          shellcheck -S warning docker/blas-wiring.sh docker/flavour-setup.sh docker/assert-r-lto.sh
 
       - name: ${{ matrix.suite }}
         run: bash tests/${{ matrix.suite }}
@@ -145,7 +145,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky, nold]
+        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky, nold, lto]
     steps:
       - uses: actions/checkout@v5
 

@@ -82,7 +82,7 @@ RUN if [ -n "${R_BUILD_SYSDEPS}" ]; then apt-get update -qq && DEBIAN_FRONTEND=n
 ## installed and selected before R is built, because R's configure links
 ## against whatever is selected at that point.
 ARG RCC_FLAVOUR=
-COPY blas-wiring.sh flavour-setup.sh assert-r-blas.sh /opt/rcheck/
+COPY blas-wiring.sh flavour-setup.sh assert-r-blas.sh assert-r-lto.sh /opt/rcheck/
 COPY flavours /opt/rcheck/flavours
 RUN chmod 0755 /opt/rcheck/*.sh && \
     if [ -n "${RCC_FLAVOUR}" ]; then \
@@ -128,13 +128,15 @@ RUN set -eu; \
     NO_UPDATE=1 MAKEFLAGS="${MAKEFLAGS}" \
         /bin/bash /entry-build-r.sh ${RCC_RCONF_FLAGS} ${RCC_LDFLAGS}
 
-## Check that R runs, that the BLAS selection is still in place, and that R
-## itself loads the arm's BLAS. Then record what was built.
+## Check that R runs, that the BLAS selection is still in place, that R
+## itself loads the arm's BLAS, and that an arm built with LTO does LTO. Then
+## record what was built.
 USER root
 RUN set -eu; \
     /build/bin/R --version; \
     sh /opt/rcheck/blas-wiring.sh verify "${RCC_FLAVOUR}"; \
     sh /opt/rcheck/assert-r-blas.sh "${RCC_FLAVOUR}" /build/bin/R; \
+    sh /opt/rcheck/assert-r-lto.sh "${RCC_FLAVOUR}" /build/bin/R; \
     { \
       echo "flavour: ${RCC_FLAVOUR}"; \
       echo "built: ${BUILD_DATE:-unrecorded}"; \
@@ -144,6 +146,7 @@ RUN set -eu; \
       echo "arch: $(dpkg --print-architecture)"; \
       echo "glibc: $(ldd --version | head -n1)"; \
       cat /etc/rcheck/r-blas.txt 2>/dev/null || true; \
+      cat /etc/rcheck/r-lto.txt 2>/dev/null || true; \
     } > /etc/rcheck/manifest.txt; \
     cat /etc/rcheck/manifest.txt
 
