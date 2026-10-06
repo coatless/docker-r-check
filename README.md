@@ -1,7 +1,7 @@
 # r-check-containers
 
 These containers rerun several of CRAN's additional checks on your own
-machine, among them the BLAS, clang 23, noLD and donttest checks.
+machine, among them the BLAS, clang 23, noLD, LTO and donttest checks.
 
 Each image is called an *arm*. An arm is R-devel built with `build-R` and
 `Rconf` from the [CRAN QA tree][qa-tree], on a Debian base that gets its
@@ -26,12 +26,13 @@ flowchart BT
     build --> blas
     build --> clang23
     build --> nold
+    build --> lto
     build --> forky
 ```
 
 ## Arms
 
-There are nine arms. Each one changes a single thing against `reference`,
+There are ten arms. Each one changes a single thing against `reference`,
 except `blisfedora`, which also needs a newer Debian for its BLIS.
 
 | Arm | What it changes | Passed to `Rconf` |
@@ -44,12 +45,14 @@ except `blisfedora`, which also needs a newer Debian for its BLIS.
 | `blisfedora` | The BLIS binary from Fedora's `blis-2.0-5` package, which is the one CRAN uses, on Debian forky | `--with-blas=-lblas --with-lapack=-llapack` |
 | `clang23` | clang 23 and flang 23, with libc++ | `-fc/23 -bi` |
 | `nold` | R built without long double | `-bi --disable-long-double` |
+| `lto` | R and every package it installs built with link-time optimization | `-bi --enable-lto` |
 | `forky` | Debian forky, which has glibc 2.43 | `-bi` |
 
-`reference` is the control. All nine build on GitHub's x86 runners, and the
+`reference` is the control. All ten build on GitHub's x86 runners, and the
 first three also build on a Mac under Rosetta. A build fails unless R reports
 the BLAS the arm is named for, so an image cannot carry a different BLAS than
-its name says.
+its name says. The `lto` build also fails unless the linker catches a type
+mismatch planted between two files.
 
 CRAN's [list of issue kinds][issue-kinds] changes often. Regular ATLAS runs
 stopped on 2026-09-01, according to the [notes on the BLAS checks][rblas],
@@ -75,6 +78,14 @@ packages.
 | clang23 | 97 | Three packages fail to compile, with the same compiler error as at CRAN. 83 pass, mostly because `duckdb`, which they need, builds again. |
 | noLD | 5 | Three fail their tests in `nold` as at CRAN and pass in `reference`. |
 | donttest | 184 | 157 show the failing `\donttest` examples CRAN reports, 134 of them with exactly CRAN's set of problems. These run in `reference` with the examples switched on. |
+
+On 2026-10-06 CRAN listed no LTO issues, because the packages that had them
+have been archived. Their 30 install logs are still published, so I checked
+the `lto` arm against those, with each package taken from CRAN's archive.
+Fourteen of the 30 still compile with current R-devel, and all 14 give the
+same LTO warnings as CRAN's log. Two of the 14 then fail to load, for
+reasons that have nothing to do with LTO. The other 16 stop earlier, on code
+that no longer compiles or on dependencies that are gone.
 
 Pushing a branch named `evaluate` starts a run, and `eval/run.env` says which
 lists it covers. A full run keeps GitHub's runners busy for several hours.
@@ -278,16 +289,19 @@ to `unstable`.
 ## Tests and CI
 
 Two test scripts check the BLAS setup against real Debian packages, including
-cases that should fail. Each runs in a fresh container.
+cases that should fail. A third checks the LTO test with a stand-in for R.
+Each runs in a fresh container.
 
 ```sh
 docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo \
   debian:trixie-slim bash tests/blas-wiring-test.sh
 docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo \
   debian:trixie-slim bash tests/flavour-test.sh
+docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo \
+  debian:trixie-slim bash tests/lto-assert-test.sh
 ```
 
-The [build workflow](.github/workflows/build.yml) runs both tests, builds the
+The [build workflow](.github/workflows/build.yml) runs the tests, builds the
 base image, then builds each arm and runs `R CMD check` on `digest` and
 `jsonlite` in it. That last step only confirms that a check runs to a
 `Status:` line. The [evaluate workflow](.github/workflows/evaluate.yml) is
@@ -322,6 +336,12 @@ The checks install dependencies from CRAN and Bioconductor only. A package
 that needs one from another repository, such as `cmdstanr`, stops at the
 dependency step.
 
+The `lto` arm builds every package with LTO, dependencies included. CRAN
+builds R with `--enable-lto=R` and installs only the package under test with
+`--use-LTO`. The package under test gets the same flags either way. The arm
+uses Debian's GCC 14, and CRAN's logs were made with the Fedora GCC of their
+day.
+
 `blisfedora` is not a pure Debian arm. It loads a Fedora binary that needs
 glibc 2.43, so it builds on Debian forky. I keep it because it shows which of
 CRAN's BLIS results come from Fedora's build of BLIS.
@@ -353,12 +373,13 @@ docker/flavours/*.env        one file per arm with packages, pins and Rconf flag
 docker/flavour-setup.sh      installs an arm's system packages, then selects the BLAS
 docker/blas-wiring.sh        sets and verifies Debian's BLAS/LAPACK alternatives
 docker/assert-r-blas.sh      fails the build unless R uses the arm's BLAS
+docker/assert-r-lto.sh       fails the lto build unless the linker does LTO
 docker/fetch-recommended.sh  fetches R's recommended packages over HTTPS
 docker/entry-build-r.sh      runs build-R and fails if the build or make check does
 docker/entry-pkgcheck.sh     the check entrypoint (check_CRAN_incoming -n)
 demo/                        the scripts described above
 eval/                        picks CRAN's current issues and writes the comparison
-tests/                       tests for the BLAS setup, run in debian:trixie-slim
+tests/                       tests for the BLAS and LTO setup, run in debian:trixie-slim
 build-images.sh, build-R.sh, chk-pkgs.sh   the original host-mounted workflow
 ```
 
