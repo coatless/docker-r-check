@@ -263,7 +263,8 @@ for tb in "${tarballs[@]}"; do
     dest="$out/$pkg"
     rm -rf "$dest"; mkdir -p "$dest"
     "$ENGINE" cp "$name:/build/CRAN/$pkg.Rcheck" "$dest/" >/dev/null 2>&1 || true
-    cp "$console" "$dest/console.log"
+    # One console log serves every package of the run, so link it.
+    ln "$console" "$dest/console.log" 2>/dev/null || cp "$console" "$dest/console.log"
     status="$(check_status "$dest/$pkg.Rcheck/00check.log")"
     if [ -z "$status" ]; then verdict=2; elif [ "$status" = OK ]; then verdict=0; else verdict=1; fi
     {

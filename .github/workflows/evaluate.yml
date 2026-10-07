@@ -417,11 +417,14 @@ jobs:
           for r in results results@dir results@isolated results@offline results@podman; do
             [ -d "$r/$ARM" ] || continue
             o="out/$LABEL${r#results}"
+            # The console log covers every package of the job, so keep it once.
+            mkdir -p "$o"
+            cp "$r/$ARM"/console-*.log "$o/" 2>/dev/null || true
             for d in "$r/$ARM"/*/; do
               p=$(basename "$d")
               [ -f "$d/manifest.dcf" ] || continue
               mkdir -p "$o/$p"
-              cp "$d/manifest.dcf" "$d/console.log" "$o/$p/"
+              cp "$d/manifest.dcf" "$o/$p/"
               if [ -d "$d/$p.Rcheck" ]; then
                 mkdir -p "$o/$p/$p.Rcheck"
                 (cd "$d/$p.Rcheck" && find . -maxdepth 2 \( -name '00check.log' -o -name '00install.out' \
