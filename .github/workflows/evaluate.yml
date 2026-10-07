@@ -142,10 +142,16 @@ jobs:
         run: |
           python3 - <<'EOF' | tee -a "$GITHUB_OUTPUT"
           import csv, json, math, os
-          count = {}
+          count, control = {}, 0
           for row in csv.DictReader(open("oracle/targets.tsv"), delimiter="\t"):
               count[row["arm"]] = count.get(row["arm"], 0) + 1
-          jobs = [{"arm": "reference", "targets": "reference", "label": "reference", "shard": 1, "shards": 1}]
+              # The packages reference checks as the control. Keep this in
+              # step with the check job's own choice.
+              control += row["arm"] in ("openblas", "mkl", "blis", "atlas", "nold", "arm64") or row["install_href"] != "-"
+          # A long control list is split over several jobs, like any other.
+          shards = max(1, min(20, math.ceil(control / 15)))
+          jobs = [{"arm": "reference", "targets": "reference", "label": "reference", "shard": s, "shards": shards}
+                  for s in range(1, shards + 1)]
           # Lists that run in an image someone else publishes, not in an arm.
           published = []
           # Arms with nothing on CRAN's list today still check the other packages.
@@ -299,7 +305,8 @@ jobs:
           case "$LABEL" in
           reference)
             targets=$(tail -n +2 oracle/targets.tsv |
-              awk -F'\t' '$5 ~ /^(openblas|mkl|blis|atlas|nold|arm64)$/ || $7 != "-" {print $1}') ;;
+              awk -F'\t' '$5 ~ /^(openblas|mkl|blis|atlas|nold|arm64)$/ || $7 != "-" {print $1}' |
+              awk -v n="$SHARDS" -v k="$SHARD" '!seen[$0]++ && i++ % n == k - 1') ;;
           *)
             targets=$(tail -n +2 oracle/targets.tsv |
               awk -F'\t' -v a="$TARGETS" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1}') ;;
