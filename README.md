@@ -1,13 +1,15 @@
 # r-check-containers
 
 These containers rerun several of CRAN's additional checks on your own
-machine, among them the BLAS, clang 23, noLD, LTO and donttest checks.
+machine, among them the BLAS, clang 23, noLD, LTO, sanitizer, valgrind and
+donttest checks, on x86 and on arm64.
 
 Each image is called an *arm*. An arm is R-devel built with `build-R` and
 `Rconf` from the [CRAN QA tree][qa-tree], on a Debian base that gets its
 system libraries from AASC's [`rcheckserver`][aasc]. An arm differs from the
-`reference` arm in the BLAS, the compilers, a configure option or the Debian
-release, so a difference in a check result can be traced to that change.
+`reference` arm in the BLAS, the compilers, a configure option, the Debian
+release or the CPU architecture, so a difference in a check result can be
+traced to that change.
 
 This is a fork of Simon Urbanek's [docker-r-check][docker-r-check]. His
 build-and-mount workflow, described in [README](README), works as before. The
@@ -27,12 +29,14 @@ flowchart BT
     build --> clang23
     build --> nold
     build --> lto
+    build --> san["gccsan, clangsan,<br/>valgrind"]
     build --> forky
+    build --> arm64
 ```
 
 ## Arms
 
-There are ten arms. Each one changes a single thing against `reference`,
+There are fourteen arms. Each one changes a single thing against `reference`,
 except `blisfedora`, which also needs a newer Debian for its BLIS.
 
 | Arm | What it changes | Passed to `Rconf` |
@@ -46,10 +50,15 @@ except `blisfedora`, which also needs a newer Debian for its BLIS.
 | `clang23` | clang 23 and flang 23, with libc++ | `-fc/23 -bi` |
 | `nold` | R built without long double | `-bi --disable-long-double` |
 | `lto` | R and every package it installs built with link-time optimization | `-bi --enable-lto` |
+| `gccsan` | GCC's address and undefined behavior sanitizers | `-bi -x` |
+| `clangsan` | clang 23 with its address and undefined behavior sanitizers | `-fc/23 -bi -x` |
+| `valgrind` | R with valgrind instrumentation, and checks run under valgrind | `-bi -v` |
 | `forky` | Debian forky, which has glibc 2.43 | `-bi` |
+| `arm64` | The arm64 architecture | `-bi` |
 
-`reference` is the control. All ten build on GitHub's x86 runners, and the
-first three also build on a Mac under Rosetta. A build fails unless R reports
+`reference` is the control. All fourteen build on GitHub's runners, `arm64`
+on an arm64 one and the rest on x86. The first three also build on a Mac
+under Rosetta. A build fails unless R reports
 the BLAS the arm is named for, so an image cannot carry a different BLAS than
 its name says. The `lto` build also fails unless the linker catches a type
 mismatch planted between two files.
@@ -65,19 +74,25 @@ table(x$kind)
 
 ## How the arms compare with CRAN
 
-A workflow checks every package on six of CRAN's current lists in the arm
-that matches its list, with `reference` as the control, then compares each
-result with CRAN's own log. On 2026-10-04 and 2026-10-05 that was 298
-packages.
+A workflow checks every package on CRAN's current lists in the arm that
+matches its list, with `reference` as the control, then compares each result
+with CRAN's own log. Between 2026-10-04 and 2026-10-07 that was 350 entries.
 
 | CRAN's list | Packages | What the arms showed |
 |---|---|---|
-| MKL | 3 | One real MKL failure, a segfault in the tests of `fastPLS`. It appears in `mkl` and not in `reference`. |
-| BLIS | 6 | Four appear with Fedora's binary and two with Debian's BLIS. Which ones depends on the kernels BLIS uses for the CPU. |
-| OpenBLAS | 3 | All three failed at CRAN on a web request, which is not an OpenBLAS problem. |
+| OpenBLAS | 5 | Both real failures reproduce, `netrics` and `spCF`, on the same test as at CRAN. The other three failed at CRAN on a web request. |
+| MKL | 3 | `fastPLS` segfaults and `OpenSpecy` fails the same test as at CRAN, both in `mkl` and not in `reference`. |
+| BLIS | 7 | Three appear with Debian's BLIS and a fourth with Fedora's binary. One was a web failure at CRAN, and two never appear. |
 | clang23 | 97 | Three packages fail to compile, with the same compiler error as at CRAN. 83 pass, mostly because `duckdb`, which they need, builds again. |
 | noLD | 5 | Three fail their tests in `nold` as at CRAN and pass in `reference`. |
 | donttest | 184 | 157 show the failing `\donttest` examples CRAN reports, 134 of them with exactly CRAN's set of problems. These run in `reference` with the examples switched on. |
+| Sanitizers and valgrind | 7 | Six show CRAN's error in `gccsan`, `clangsan` or `valgrind`. The seventh is an install warning. |
+| arm64 Linux | 42 | 37 show the arm64 failure in `arm64`, 28 of them with exactly CRAN's set of problems. For 29 of the 37, `reference` is clean on x86. |
+
+A check uses the package version that CRAN's log is for. Dependencies come
+from a CRAN snapshot one day old, and a package updated since would otherwise
+be checked at the version before. That hid both OpenBLAS failures in an
+earlier run.
 
 On 2026-10-06 CRAN listed no LTO issues, because the packages that had them
 have been archived. Their 30 install logs are still published, so I checked
@@ -86,6 +101,11 @@ Fourteen of the 30 still compile with current R-devel, and all 14 give the
 same LTO warnings as CRAN's log. Two of the 14 then fail to load, for
 reasons that have nothing to do with LTO. The other 16 stop earlier, on code
 that no longer compiles or on dependencies that are gone.
+
+Two more lists ran in the images their own maintainers publish, with nothing
+built here. Ten of CRAN's 11 musl failures reproduce in the
+[Alpine image][musl] behind those checks. Of the 67 packages on the rchk
+list, 45 show some or all of CRAN's findings in [r-hub's][rhub] `rchk` image.
 
 Pushing a branch named `evaluate` starts a run, and `eval/run.env` says which
 lists it covers. A full run keeps GitHub's runners busy for several hours.
@@ -110,6 +130,31 @@ By default the image checks one package at a time with the QA tree's
 `tools::check_packages_in_dir()` and checks several packages at once. On 16
 packages in `reference` the two gave the same results. The second took 15
 minutes on four cores where the first took 96, dependencies included.
+
+## Checking code you do not trust
+
+A package runs its own code when it installs and in its examples and tests.
+`RCC_ISOLATE=1` keeps that code off the network and away from everything but
+its own check directory.
+
+```sh
+RCC_ISOLATE=1 demo/03-check.sh reference ~/src/somepkg_1.0.tar.gz
+```
+
+The check then runs in two containers. The first has the network and
+installs the dependencies. It reads the package's `DESCRIPTION` and runs none
+of its code. The second runs the check with the network off, a read-only root
+file system, the dependencies mounted read-only and a memory limit of 8 GB.
+Both run as an unprivileged user with every capability dropped, and the
+`standalone` image has no `sudo` rule.
+
+On 28 package checks in two arms this gave the same result as the ordinary
+check for 22. The other six were packages that download something, which
+fail with the network off.
+
+This lowers the risk and does not remove it. The package's code still shares
+the host's kernel. For code from strangers I would add rootless Podman, which
+the scripts support, or a virtual machine.
 
 ## One package in two arms
 
@@ -216,6 +261,7 @@ A few environment variables change how the scripts behave.
 | `OPENBLAS_CORETYPE` | Pins the OpenBLAS kernel, the CPU-specific code it runs. |
 | `BLIS_ARCH_TYPE` | Pins the BLIS kernel set in the same way, for example `haswell`. |
 | `RCC_LIBRARY_CACHE=1` | Keeps installed dependencies in a Docker volume so the next run skips compiling them. |
+| `RCC_ISOLATE=1` | Checks in two containers, the second cut off and read-only. `RCC_MEMORY` sets its memory limit. |
 | `RCC_NETWORK=none` | Cuts the network off during the check. Use it after a run with `RCC_LIBRARY_CACHE=1` has installed the dependencies. |
 | `RCC_ENGINE=podman` | Runs the scripts with Podman in place of Docker. |
 | `RCC_COMPARE_ONLY=1` | Makes `04-compare.sh` compare earlier results without running the checks again. |
@@ -255,7 +301,9 @@ Rosetta picks Nehalem. Setting `OPENBLAS_CORETYPE=Haswell` reproduced CRAN's
 NOTE. AVX-512 kernels such as `SkylakeX` do not run under Rosetta at all.
 
 I always pass `--platform linux/amd64`, as the demos do. Without it Docker
-builds for arm64 and the base image stops with an error.
+builds for arm64 and the base image stops with an error. The `arm64` arm is
+the one that should need no emulation here. I have built it only on GitHub's
+arm64 runners so far.
 
 ## Using Docker directly
 
@@ -342,6 +390,17 @@ builds R with `--enable-lto=R` and installs only the package under test with
 uses Debian's GCC 14, and CRAN's logs were made with the Fedora GCC of their
 day.
 
+The sanitizer arms compile every dependency with the sanitizers too, so an
+error can come from a dependency. CRAN's machine instruments few of them.
+Those arms and `valgrind` use the check script that takes several packages at
+once, because the other one ran out of time installing dependencies. Under
+`valgrind`, a test that compares its output with a saved copy gets a NOTE,
+since valgrind's banner is in the output. Debian has valgrind 3.24, and CRAN
+uses 3.27.
+
+The `arm64` arm lacks `quarto` and `openbugs`, which have no arm64 packages.
+CRAN's own arm64 checks use the R release on Ubuntu.
+
 `blisfedora` is not a pure Debian arm. It loads a Fedora binary that needs
 glibc 2.43, so it builds on Debian forky. I keep it because it shows which of
 CRAN's BLIS results come from Fedora's build of BLIS.
@@ -357,10 +416,18 @@ The image's entrypoint always exits 0, so `03-check.sh` reads the result from
 Builds pin R-devel and the QA tree by SVN revision. Debian packages are not
 pinned, and neither is clang 23, so two builds made a week apart can differ.
 
-I have not yet published images or hardened the containers for untrusted
-code. The check user still has passwordless `sudo`. The arms also apply only
-to the `standalone` image, and the original build-and-mount workflow does not
-use them yet.
+I have not yet published images. The arms apply only to the `standalone`
+image, and the original build-and-mount workflow does not use them yet.
+
+## Other containers
+
+[r-hub][rhub] publishes containers for many of CRAN's additional checks, on
+Fedora or Ubuntu, and rebuilds them daily.
+[r-devel/rcheckserver][rcheckserver-image] is a Debian image with the
+`rcheckserver` libraries for x86 and arm64, and CRAN's
+[arm64 Linux checks][arm64-checks] run in it. The arms here use CRAN's own
+build scripts on Debian, pin each build, and come with a measured comparison
+against CRAN's results.
 
 ## Layout
 
@@ -378,7 +445,7 @@ docker/fetch-recommended.sh  fetches R's recommended packages over HTTPS
 docker/entry-build-r.sh      runs build-R and fails if the build or make check does
 docker/entry-pkgcheck.sh     the check entrypoint (check_CRAN_incoming -n)
 demo/                        the scripts described above
-eval/                        picks CRAN's current issues and writes the comparison
+eval/                        picks CRAN's current issues, runs them and writes the comparison
 tests/                       tests for the BLAS and LTO setup, run in debian:trixie-slim
 build-images.sh, build-R.sh, chk-pkgs.sh   the original host-mounted workflow
 ```
@@ -394,8 +461,11 @@ The code this fork adds is licensed under GPL (>= 2), as R is.
 - [AASC Debian archive][aasc], which serves `rcheckserver`
 - [CRAN check issue kinds][issue-kinds] and the data behind them,
   [`check_issues.rds`][check-issues]
-- [Brian Ripley's notes on the BLAS checks][rblas] and on the
-  [clang23 checks][clang23-notes]
+- [Brian Ripley's notes on the BLAS checks][rblas], the
+  [clang23 checks][clang23-notes] and the
+  [sanitizer and valgrind checks][memtests]
+- [r-hub's containers][rhub], [r-devel/rcheckserver][rcheckserver-image],
+  the [arm64 Linux checks][arm64-checks] and the [musl checks][musl]
 - [R Installation and Administration][r-admin], the section on linear algebra
 - [Debian's tracker page for ATLAS][atlas]
 - [Posit Package Manager][p3m], for dated CRAN snapshots
@@ -411,6 +481,11 @@ The code this fork adds is licensed under GPL (>= 2), as R is.
 [check-issues]: https://cran.r-project.org/web/checks/check_issues.rds
 [rblas]: https://www.stats.ox.ac.uk/pub/bdr/Rblas/README.txt
 [clang23-notes]: https://www.stats.ox.ac.uk/pub/bdr/clang23/README.txt
+[memtests]: https://www.stats.ox.ac.uk/pub/bdr/memtests/README.txt
+[rhub]: https://r-hub.github.io/containers/
+[rcheckserver-image]: https://github.com/r-devel/rcheckserver
+[arm64-checks]: https://github.com/r-devel/linux-arm64-checks/
+[musl]: https://github.com/bastistician/Rcheck/blob/results/musl/README.txt
 [r-admin]: https://cran.r-project.org/doc/manuals/r-devel/R-admin.html#Linear-algebra
 [atlas]: https://tracker.debian.org/pkg/atlas
 [p3m]: https://packagemanager.posit.co/client/#/repos/cran/setup
