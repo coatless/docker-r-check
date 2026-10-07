@@ -121,6 +121,10 @@ USER root
 RUN install -d -o rbuild -g rbuild /build
 USER rbuild
 
+## Only the sanitizer arms read this. CRAN's sanitizer checks switch leak
+## detection off, and it needs ptrace, which a container does not allow.
+ENV ASAN_OPTIONS=detect_leaks=0
+
 ## NO_UPDATE=1 keeps the entrypoint from updating the pinned sources.
 RUN set -eu; \
     . /opt/rcheck/flavours/${RCC_FLAVOUR}.env; \

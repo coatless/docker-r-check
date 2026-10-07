@@ -118,8 +118,14 @@ if [ "${RCC_RUNNER}" = dir ]; then
 	*" -r "*) export _R_CHECK_CRAN_INCOMING_=false ;;
 	*) runner_args="$runner_args -c" ;;
     esac
+    ## arguments for R CMD check itself, such as --use-valgrind
+    if [ -n "${RCC_CHECK_ARGS}" ]; then
+	runner_args="$runner_args -a=${RCC_CHECK_ARGS}"
+    fi
+    echo "== runner: tools::check_packages_in_dir(), ${RCC_NCPUS:-$(nproc)} at a time${RCC_CHECK_ARGS:+, with ${RCC_CHECK_ARGS}}"
     exec /build/bin/Rscript --default-packages=NULL ~/bin/check-CRAN-incoming \
 	 --exe /build/bin/R $runner_args
 fi
 
+echo "== runner: check_CRAN_incoming, one package at a time"
 check_CRAN_incoming -n "$@"

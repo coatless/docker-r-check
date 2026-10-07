@@ -26,7 +26,7 @@ L="/usr/lib/$MA"
 # Print one "<alternatives-group>|<target>" line per group the arm sets.
 flavour_spec() {
     case "$1" in
-    reference|forky|nold|lto)
+    reference|forky|nold|lto|gccsan|valgrind)
         printf '%s\n' \
             "libblas.so.3-$MA|$L/blas/libblas.so.3" \
             "liblapack.so.3-$MA|$L/lapack/liblapack.so.3"
@@ -68,7 +68,7 @@ flavour_spec() {
             "libblas.so-$MA|/opt/blis/lib/libblis.so" \
             "liblapack.so-$MA|$L/lapack/liblapack.so"
         ;;
-    mkl|clang23)
+    mkl|clang23|clangsan)
         # MKL is linked by path and does not use alternatives. clang23 uses
         # R's own BLAS. Both keep the reference selection.
         printf '%s\n' \
@@ -88,13 +88,13 @@ expected_fragment() {
     case "$1" in
     # -bi builds R with its own BLAS at $R_HOME/lib/libRblas.so, so that is
     # what R reports, whatever the Debian alternatives say.
-    reference|forky|nold|lto) echo "libRblas.so" ;;
+    reference|forky|nold|lto|gccsan|valgrind) echo "libRblas.so" ;;
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
     blis)      echo "/blis-serial/" ;;
     blisfedora) echo "/opt/blis/" ;;
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;
-    clang23)   echo "libRblas.so" ;;
+    clang23|clangsan) echo "libRblas.so" ;;
     *)         echo "" ;;
     esac
 }

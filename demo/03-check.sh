@@ -113,14 +113,15 @@ cp "${tarballs[@]}" "$stage/"
 chmod 0755 "$stage"; chmod 0644 "$stage"/*.tar.gz
 
 env_args=()
+# An arm can choose the runner itself, as valgrind does, so the manifest
+# takes it from what the entrypoint prints.
 runner="${RCC_RUNNER:-}"
 case "$runner" in
-"")  runner_desc="check_CRAN_incoming, one package at a time" ;;
-dir) runner_desc="tools::check_packages_in_dir(), ${RCC_NCPUS:-one per core} at a time"
-     env_args+=(-e RCC_RUNNER=dir)
-     [ -n "${RCC_NCPUS:-}" ] && env_args+=(-e "RCC_NCPUS=$RCC_NCPUS") ;;
+"")  ;;
+dir) env_args+=(-e RCC_RUNNER=dir) ;;
 *)   die "RCC_RUNNER must be 'dir' or unset, not '$runner'" ;;
 esac
+[ -n "${RCC_NCPUS:-}" ] && env_args+=(-e "RCC_NCPUS=$RCC_NCPUS")
 
 [ -n "${CRAN_MIRROR:-}" ] && env_args+=(-e "CRAN_MIRROR=$CRAN_MIRROR")
 [ -n "${OPENBLAS_CORETYPE:-}" ] && env_args+=(-e "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE")
@@ -275,7 +276,7 @@ for tb in "${tarballs[@]}"; do
         echo "OpenBLAS-Coretype-Pinned: ${OPENBLAS_CORETYPE:-no}"
         echo "BLIS-Arch-Type-Pinned: ${BLIS_ARCH_TYPE:-no}"
         echo "Mode: $mode"
-        echo "Runner: $runner_desc"
+        echo "Runner: $(sed -n 's/^== runner: //p' "$console" | head -n 1)"
         echo "Engine: $ENGINE"
         echo "Network: $([ "$isolate" = 0 ] && echo "${RCC_NETWORK:-on}" || echo "none during the check")"
         echo "Isolation: $isolation"
@@ -301,7 +302,7 @@ find "$out/log/.tmp" -maxdepth 1 -name 'CRAN_*.log' -exec mv {} "$out/log/" \; 2
 rm -rf "$out/log/.tmp"
 # check_packages_in_dir() keeps each dependency's install log and each check's
 # output in Outputs/.
-[ "$runner" != dir ] || "$ENGINE" cp "$name:/build/CRAN/Outputs" "$out/log/" >/dev/null 2>&1 || true
+"$ENGINE" cp "$name:/build/CRAN/Outputs" "$out/log/" >/dev/null 2>&1 || true
 
 echo "   results: $out/<package>/  (manifest.dcf, console.log, <package>.Rcheck/)"
 exit "$worst"
