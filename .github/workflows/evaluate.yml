@@ -105,6 +105,19 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -e KINDS -v "$GITHUB_WORKSPACE:/w" -w /w/oracle \
             docker.io/library/r-base:latest Rscript /w/eval/targets.R
           tail -n +2 targets.tsv | while IFS=$'\t' read -r pkg _ kind href _ log install; do
+            case "$href" in
+            */memtests/*)
+              # A sanitizer or valgrind result is a directory. Its check log
+              # becomes the log, and the outputs with the errors go beside it.
+              d="${log%.out}.d"
+              tests=$(curl -fsSL "$href/tests/" 2>/dev/null |
+                grep -oE 'href="[^"?/][^"]*"' | sed 's/^href="/tests\//; s/"$//' || true)
+              for f in 00check.log 00install.out "$pkg-Ex.Rout" $tests; do
+                curl -fsSL --create-dirs --max-filesize 30000000 -o "$d/$f" "$href/$f" 2>/dev/null || true
+              done
+              cp "$d/00check.log" "$log" || echo "could not fetch $href ($pkg, $kind)"
+              continue ;;
+            esac
             curl -fsSL -o "$log" "$href" || echo "could not fetch $href ($pkg, $kind)"
             if [ "$install" != - ]; then
               curl -fsSL --max-filesize 3000000 -o "${log%.out}.install.log" "$install" ||
@@ -262,12 +275,12 @@ jobs:
           _R_CHECK_ELAPSED_TIMEOUT_: 3600
         run: |
           # reference is the control for every BLAS and noLD issue, and for the
-          # clang23 packages that fail to install at CRAN. An LTO warning needs
-          # an LTO build, so those packages have no control.
+          # packages that fail to install at CRAN. An LTO warning or a
+          # sanitizer error needs its own build, so those have no control.
           case "$LABEL" in
           reference)
             targets=$(tail -n +2 oracle/targets.tsv |
-              awk -F'\t' '($5 != "clang23" && $5 != "donttest" && $5 != "lto") || $7 != "-" {print $1}') ;;
+              awk -F'\t' '$5 ~ /^(openblas|mkl|blis|atlas|nold)$/ || $7 != "-" {print $1}') ;;
           *)
             targets=$(tail -n +2 oracle/targets.tsv |
               awk -F'\t' -v a="$TARGETS" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1}') ;;

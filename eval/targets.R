@@ -13,7 +13,10 @@ rds <- if (length(args)) args[[1]] else "check_issues.rds"
 # donttest has no arm of its own. Its packages are checked in the reference
 # arm with the \donttest examples switched on.
 arms <- c(OpenBLAS = "openblas", MKL = "mkl", BLIS = "blis", ATLAS = "atlas",
-          clang23 = "clang23", noLD = "nold", donttest = "donttest", LTO = "lto")
+          clang23 = "clang23", noLD = "nold", donttest = "donttest", LTO = "lto",
+          "gcc-ASAN" = "gccsan", "gcc-UBSAN" = "gccsan",
+          "clang-ASAN" = "clangsan", "clang-UBSAN" = "clangsan",
+          valgrind = "valgrind")
 kinds <- strsplit(Sys.getenv("KINDS", paste(names(arms), collapse = " ")), " +")[[1]]
 x <- readRDS(rds)
 x <- x[x$kind %in% intersect(names(arms), kinds), c("Package", "Version", "kind", "href")]
@@ -57,7 +60,9 @@ install <- tapply(ifelse(is_install, x$href, NA), key, function(v) v[!is.na(v)][
 x <- x[order(x$kind, x$Package, is_install), ]
 x <- x[!duplicated(paste(x$kind, x$Package)), ]
 x$arm <- unname(arms[x$kind])
-x$log <- file.path("logs", paste0(x$arm, "-", x$Package, ".out"))
+# Two kinds can share an arm, so their logs are named after the kind.
+shared <- x$arm %in% names(which(table(arms) > 1))
+x$log <- file.path("logs", paste0(ifelse(shared, x$kind, x$arm), "-", x$Package, ".out"))
 x$install_href <- unname(install[paste(x$kind, x$Package)])
 x$install_href[is.na(x$install_href)] <- "-"
 

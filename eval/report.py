@@ -95,6 +95,40 @@ def lto_warnings(path):
     return {m.group(1): kinds[m.group(2)] for m in LTO.finditer(text)}
 
 
+# What a sanitizer or valgrind prints for one error, without where it happened.
+SIGNS = {
+    "ASAN": re.compile(r"ERROR: AddressSanitizer: (\S+)"),
+    "UBSAN": re.compile(r"runtime error: (.+?)\s*$"),
+    "valgrind": re.compile(r"^\s*==\d+== ((?:Invalid|Conditional jump|Use of uninitialised|Mismatched|"
+                           r"Source and destination|Syscall param|Jump to the invalid|Argument).*?)\s*$"),
+}
+
+
+def sign_of(kind):
+    """The kind of error a list is about: ASAN, UBSAN or valgrind, else None."""
+    last = kind.rsplit("-", 1)[-1]
+    return last if last in SIGNS else None
+
+
+def signatures(root, sign):
+    """Map each distinct error of one kind in the files under a directory to that kind.
+
+    CRAN keeps a sanitizer or valgrind result as a directory of outputs, and
+    the check status is often OK, so these are compared by the errors printed.
+    """
+    found = {}
+    for d, _, files in os.walk(root):
+        for f in files:
+            try:
+                for line in open(os.path.join(d, f), encoding="utf-8", errors="replace"):
+                    m = SIGNS[sign].search(line.rstrip("\n"))
+                    if m:
+                        found[m.group(1)[:100]] = sign
+            except OSError:
+                pass
+    return found
+
+
 def first_error(path):
     """The first compiler error in an install log, or None."""
     try:
@@ -134,6 +168,8 @@ def ours(results, label, pkg, kind=None):
         warned = lto_warnings(os.path.join(d, pkg + ".Rcheck", "00install.out"))
         found = warned or stopped
         then_failed = bool(warned and stopped)
+    elif sign_of(kind or ""):
+        found = signatures(d, sign_of(kind)) or found
     return {
         "status": m.get("Status", "did not complete"),
         "problems": found or {},
@@ -214,13 +250,15 @@ def main(oracle, results, earlier=None):
     issues, errors, tally = [], [], {}
     for t in targets:
         pkg, arm = t["Package"], t["arm"]
-        lto = t["kind"] == "LTO"
+        lto, sign = t["kind"] == "LTO", sign_of(t["kind"])
         cran = (lto_warnings if lto else problems)(os.path.join(oracle, t["log"]))
         if cran is None:
             issues.append(f"{pkg} ({t['kind']}): CRAN's log could not be fetched")
             cran = {}
-        ref = None if lto else ours(results, "reference", pkg)
-        most = 3 if lto else None
+        if sign:
+            cran = signatures(os.path.join(oracle, t["log"][:-4] + ".d"), sign) or cran
+        ref = None if lto or sign else ours(results, "reference", pkg)
+        most = 3 if lto or sign else None
         variants = [d for d in labels if d == arm or d.startswith(arm + "-")] or [arm]
         for label in variants:
             a = ours(results, label, pkg, t["kind"])
