@@ -37,6 +37,9 @@ jobs:
       qa_rev: ${{ steps.pin.outputs.qa_rev }}
       snapshot: ${{ steps.pin.outputs.snapshot }}
       matrix: ${{ steps.arms.outputs.matrix }}
+      published: ${{ steps.arms.outputs.published }}
+      any_arm: ${{ steps.arms.outputs.any_arm }}
+      any_published: ${{ steps.arms.outputs.any_published }}
       conditions: ${{ steps.read.outputs.conditions }}
       baseline: ${{ steps.read.outputs.baseline }}
     steps:
@@ -143,12 +146,18 @@ jobs:
           for row in csv.DictReader(open("oracle/targets.tsv"), delimiter="\t"):
               count[row["arm"]] = count.get(row["arm"], 0) + 1
           jobs = [{"arm": "reference", "targets": "reference", "label": "reference", "shard": 1, "shards": 1}]
+          # Lists that run in an image someone else publishes, not in an arm.
+          published = []
           # Arms with nothing on CRAN's list today still check the other packages.
           for arm in ("openblas", "mkl", "atlas"):
               count.setdefault(arm, 0)
           for arm in sorted(count):
               # A long list is split over several jobs of about 10 packages.
               shards = max(1, min(20, math.ceil(count[arm] / 10)))
+              if arm in ("musl", "rchk"):
+                  published += [{"kind": arm, "label": arm, "shard": s, "shards": shards}
+                                for s in range(1, shards + 1)]
+                  continue
               if arm == "donttest":
                   # The reference arm, with the \\donttest examples switched on.
                   jobs += [{"arm": "reference", "targets": arm, "label": arm, "shard": s, "shards": shards,
@@ -168,9 +177,13 @@ jobs:
                         "shard": 1, "shards": 1}
                        for a, label in builds for k in ("zen3", "haswell", "skx")]
           only = os.environ.get("ONLY", "").split()
-          jobs = [j for j in jobs
-                  if not only or j["label"] in only or f'{j["label"]}#{j["shard"]}' in only]
+          keep = lambda j: not only or j["label"] in only or f'{j["label"]}#{j["shard"]}' in only
+          jobs, published = [j for j in jobs if keep(j)], [j for j in published if keep(j)]
           print("matrix=" + json.dumps({"include": jobs}))
+          print("published=" + json.dumps({"include": published}))
+          # A job with an empty matrix is an error, so say which lists have jobs.
+          print("any_arm=" + ("yes" if jobs else "no"))
+          print("any_published=" + ("yes" if published else "no"))
           EOF
 
       - uses: actions/upload-artifact@v4
@@ -180,6 +193,7 @@ jobs:
 
   check:
     needs: targets
+    if: needs.targets.outputs.any_arm == 'yes'
     # The arm64 arm builds and checks on an arm64 runner, the others on x86.
     runs-on: ${{ matrix.arm == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 350
@@ -413,8 +427,56 @@ jobs:
           name: results-${{ matrix.label }}-${{ matrix.shard }}
           path: out/
 
+  # The musl and rchk lists, in the images their maintainers publish.
+  published:
+    needs: targets
+    if: needs.targets.outputs.any_published == 'yes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.targets.outputs.published) }}
+    env:
+      KIND: ${{ matrix.kind }}
+      SHARD: ${{ matrix.shard }}
+      SHARDS: ${{ matrix.shards }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oracle
+          path: oracle
+
+      - name: run the packages in the published image
+        run: |
+          mkdir -p src "out/$KIND"
+          tarballs=""
+          # The version CRAN's result is for, from CRAN or from its archive.
+          while IFS=$'\t' read -r p v; do
+            f="src/${p}_$v.tar.gz"
+            if curl -fsSL -o "$f" "https://cloud.r-project.org/src/contrib/${p}_$v.tar.gz" ||
+               curl -fsSL -o "$f" "https://cloud.r-project.org/src/contrib/Archive/$p/${p}_$v.tar.gz"; then
+              tarballs="$tarballs $f"
+            else
+              echo "$p $v could not be fetched, so it was not checked" | tee -a "out/$KIND/SKIPPED-$SHARD"
+            fi
+          done < <(tail -n +2 oracle/targets.tsv |
+            awk -F'\t' -v a="$KIND" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1 "\t" $2}')
+          # shellcheck disable=SC2086 # the list is split on purpose
+          eval/published.sh "$KIND" "$PWD/results" $tarballs || echo "published.sh exited $?"
+          cp -R "results/$KIND/." "out/$KIND/" 2>/dev/null || true
+          du -sh out/*
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.label }}-${{ matrix.shard }}
+          path: out/
+
   report:
-    needs: [targets, check]
+    needs: [targets, check, published]
     if: always() && needs.targets.result == 'success'
     runs-on: ubuntu-24.04
     steps:

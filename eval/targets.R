@@ -16,7 +16,10 @@ arms <- c(OpenBLAS = "openblas", MKL = "mkl", BLIS = "blis", ATLAS = "atlas",
           clang23 = "clang23", noLD = "nold", donttest = "donttest", LTO = "lto",
           "gcc-ASAN" = "gccsan", "gcc-UBSAN" = "gccsan",
           "clang-ASAN" = "clangsan", "clang-UBSAN" = "clangsan",
-          valgrind = "valgrind", "linux-arm64" = "arm64")
+          valgrind = "valgrind", "linux-arm64" = "arm64",
+          # No arm is built for these two. Their packages run in the image
+          # that the check's own maintainer publishes.
+          musl = "musl", rchk = "rchk")
 kinds <- strsplit(Sys.getenv("KINDS", paste(names(arms), collapse = " ")), " +")[[1]]
 x <- readRDS(rds)
 x <- x[x$kind %in% intersect(names(arms), kinds), c("Package", "Version", "kind", "href")]

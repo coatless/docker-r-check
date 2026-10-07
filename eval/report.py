@@ -129,6 +129,45 @@ def signatures(root, sign):
     return found
 
 
+def install_failure(path):
+    """What stopped an install, as a one-entry result, or nothing if it finished."""
+    try:
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return None
+    if re.search(r"^\* DONE \(", text, re.M):
+        return {}
+    m = re.search(r"^.*\berror:.*$", text, re.M) or re.search(r"^ERROR:.*$", text, re.M)
+    if not m:
+        return {"install did not finish": "install"}
+    # The same error reads differently by locale and by where the package
+    # was unpacked, so straighten the quotes and drop the path above src/.
+    line = m.group(0).strip().translate(str.maketrans("‘’", "''"))
+    line = re.sub(r"/\S*?/(?=[^/\s]+/src/)", "", line)
+    return {line[:140]: "install"}
+
+
+def rchk_findings(path):
+    """Map each finding in an rchk report to its function, without the line number."""
+    try:
+        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return None
+    found, function = {}, "?"
+    for line in lines:
+        f = re.match(r"^Function (.+?)\s*$", line)
+        if f:
+            function = f.group(1)
+        m = re.match(r"^\s*(\[[A-Z]{2}\] .*?)(?:\s+\S+:\d+)?\s*$", line)
+        if m:
+            found[f"{function[:70]}: {m.group(1)[:130]}"] = "rchk"
+    return found
+
+
+# Kinds whose result is not a check log, with the file the result is in.
+OTHER = {"musl": (install_failure, "00install.out"), "rchk": (rchk_findings, "rchk.out")}
+
+
 def first_error(path):
     """The first compiler error in an install log, or None."""
     try:
@@ -170,6 +209,9 @@ def ours(results, label, pkg, kind=None):
         then_failed = bool(warned and stopped)
     elif sign_of(kind or ""):
         found = signatures(d, sign_of(kind)) or found
+    elif kind in OTHER:
+        read, name = OTHER[kind]
+        found = read(os.path.join(d, pkg + ".Rcheck", name))
     return {
         "status": m.get("Status", "did not complete"),
         "problems": found or {},
@@ -250,15 +292,16 @@ def main(oracle, results, earlier=None):
     issues, errors, tally = [], [], {}
     for t in targets:
         pkg, arm = t["Package"], t["arm"]
-        lto, sign = t["kind"] == "LTO", sign_of(t["kind"])
-        cran = (lto_warnings if lto else problems)(os.path.join(oracle, t["log"]))
+        lto, sign, other = t["kind"] == "LTO", sign_of(t["kind"]), t["kind"] in OTHER
+        read = lto_warnings if lto else OTHER[t["kind"]][0] if other else problems
+        cran = read(os.path.join(oracle, t["log"]))
         if cran is None:
             issues.append(f"{pkg} ({t['kind']}): CRAN's log could not be fetched")
             cran = {}
         if sign:
             cran = signatures(os.path.join(oracle, t["log"][:-4] + ".d"), sign) or cran
-        ref = None if lto or sign else ours(results, "reference", pkg)
-        most = 3 if lto or sign else None
+        ref = None if lto or sign or other else ours(results, "reference", pkg)
+        most = 3 if lto or sign or other else None
         variants = [d for d in labels if d == arm or d.startswith(arm + "-")] or [arm]
         for label in variants:
             a = ours(results, label, pkg, t["kind"])
@@ -273,7 +316,7 @@ def main(oracle, results, earlier=None):
                        f"{short(ref['problems']) if ref else '-'} | {v} |")
             theirs = first_error(os.path.join(oracle, t["log"][:-4] + ".install.log"))
             mine = first_error(os.path.join(results, label, pkg, pkg + ".Rcheck", "00install.out"))
-            if theirs or mine:
+            if (theirs or mine) and not other:
                 errors.append(f"- {pkg} ({label}): CRAN `{theirs or ('installed' if lto else 'no install log kept')}`, "
                               f"arm `{mine or ('installed' if a else 'not checked')}`")
     out.append("")
