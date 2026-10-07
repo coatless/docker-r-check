@@ -180,7 +180,8 @@ jobs:
 
   check:
     needs: targets
-    runs-on: ubuntu-24.04
+    # The arm64 arm builds and checks on an arm64 runner, the others on x86.
+    runs-on: ${{ matrix.arm == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 350
     strategy:
       fail-fast: false
@@ -251,7 +252,11 @@ jobs:
           sleep $((RANDOM % 120))
           # shellcheck disable=SC1090 # the arm file names its Debian suite
           suite=$(. "docker/flavours/$ARM.env" && echo "$RCC_DEBIAN_TAG")
-          if ! docker build --progress=plain --platform linux/amd64 --target standalone \
+          # shellcheck disable=SC1090
+          arch=$(. "docker/flavours/$ARM.env" && echo "$RCC_ARCH")
+          # The base refuses to build for anything but amd64 unless told to.
+          if ! docker build --progress=plain --platform "linux/$arch" --target standalone \
+                 --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
                  --build-arg DEBIAN_TAG="$suite" --build-arg RCC_FLAVOUR="$ARM" \
                  --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
                  --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
@@ -280,7 +285,7 @@ jobs:
           case "$LABEL" in
           reference)
             targets=$(tail -n +2 oracle/targets.tsv |
-              awk -F'\t' '$5 ~ /^(openblas|mkl|blis|atlas|nold)$/ || $7 != "-" {print $1}') ;;
+              awk -F'\t' '$5 ~ /^(openblas|mkl|blis|atlas|nold|arm64)$/ || $7 != "-" {print $1}') ;;
           *)
             targets=$(tail -n +2 oracle/targets.tsv |
               awk -F'\t' -v a="$TARGETS" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1}') ;;

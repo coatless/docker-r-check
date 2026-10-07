@@ -10,6 +10,7 @@ set -euo pipefail
 
 for fl in "$@"; do
     need_image "$fl"
+    PLATFORM="$(platform_of "$fl")"
     echo "================ $fl ================"
     echo "--- /etc/rcheck/manifest.txt (written when the image was built)"
     "$ENGINE" run --rm --platform "$PLATFORM" --entrypoint cat "$(image "$fl")" /etc/rcheck/manifest.txt

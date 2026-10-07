@@ -140,12 +140,13 @@ jobs:
 
   # Build each arm with R inside and report the BLAS and LAPACK R loads.
   standalone:
-    runs-on: ubuntu-24.04
+    # The arm64 arm builds on an arm64 runner, the others on x86.
+    runs-on: ${{ matrix.flavour == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
-        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky, nold, lto, gccsan, clangsan, valgrind]
+        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky, nold, lto, gccsan, clangsan, valgrind, arm64]
     steps:
       - uses: actions/checkout@v5
 
@@ -175,8 +176,12 @@ jobs:
           cd docker
           # shellcheck disable=SC1090 # the arm file names its Debian suite
           suite=$(. "flavours/$FLAVOUR.env" && echo "$RCC_DEBIAN_TAG")
+          # shellcheck disable=SC1090
+          arch=$(. "flavours/$FLAVOUR.env" && echo "$RCC_ARCH")
+          # The base refuses to build for anything but amd64 unless told to.
           docker build \
             --progress=plain \
+            --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
             --build-arg DEBIAN_TAG="$suite" \
             --build-arg RCC_FLAVOUR="$FLAVOUR" \
             --build-arg R_SVN_REV=90410 \

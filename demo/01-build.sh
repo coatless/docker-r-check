@@ -22,11 +22,15 @@ build_date="${RCC_BUILD_DATE:-$(date -u +%Y-%m-%d)}"
 mkdir -p "$RESULTS/logs"
 for fl in "$@"; do
     log="$RESULTS/logs/build-$fl.log"
+    PLATFORM="$(platform_of "$fl")"
+    # The base refuses to build for anything but amd64 unless told to.
+    allow=""; [ "$PLATFORM" = linux/amd64 ] || allow=1
     echo "== $(image "$fl")  [$PLATFORM, R r$R_SVN_REV, QA r$QA_SVN_REV]"
     echo "   log: $log"
     start=$SECONDS
     if ! "$ENGINE" build --platform "$PLATFORM" ${progress[@]+"${progress[@]}"} \
-            --build-arg DEBIAN_TAG=trixie \
+            --build-arg DEBIAN_TAG="$(suite_of "$fl")" \
+            --build-arg ALLOW_NON_AMD64="$allow" \
             --build-arg RCC_FLAVOUR="$fl" \
             --build-arg R_SVN_REV="$R_SVN_REV" \
             --build-arg QA_SVN_REV="$QA_SVN_REV" \

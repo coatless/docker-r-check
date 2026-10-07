@@ -5,8 +5,9 @@
 # Everything here can be overridden from the environment:
 #
 #   RCC_ENGINE     docker (default) or podman
-#   RCC_PLATFORM   linux/amd64 (default). Every arm is amd64. On an arm64
-#                  host this turns on emulation.
+#   RCC_PLATFORM   the platform to build and run for. By default it is the
+#                  arm's own, linux/amd64 for every arm but arm64. On a host
+#                  of the other kind this turns on emulation.
 #   R_SVN_REV      R-devel revision to build (default: the one CI builds)
 #   QA_SVN_REV     revision of CRAN/QA/Kurt (default: the one CI builds)
 #   RCC_JOBS       make -j for the R build (default 4)
@@ -24,6 +25,20 @@ RESULTS="${RCC_RESULTS:-$ROOT/results}"
 die() { echo "error: $*" >&2; exit 2; }
 
 image() { echo "rcc-standalone:$1"; }
+
+# platform_of <flavour> prints the platform an arm is built for.
+platform_of() {
+    local a
+    # shellcheck disable=SC1090 # the arm's settings
+    a="$(. "$ROOT/docker/flavours/$1.env" && echo "${RCC_ARCH:-amd64}")"
+    echo "${RCC_PLATFORM:-linux/$a}"
+}
+
+# suite_of <flavour> prints the Debian release an arm is built on.
+suite_of() {
+    # shellcheck disable=SC1090 # the arm's settings
+    (. "$ROOT/docker/flavours/$1.env" && echo "${RCC_DEBIAN_TAG:-trixie}")
+}
 
 flavours() { ls "$ROOT/docker/flavours" | sed -n 's/\.env$//p'; }
 

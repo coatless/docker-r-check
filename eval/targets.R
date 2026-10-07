@@ -16,7 +16,7 @@ arms <- c(OpenBLAS = "openblas", MKL = "mkl", BLIS = "blis", ATLAS = "atlas",
           clang23 = "clang23", noLD = "nold", donttest = "donttest", LTO = "lto",
           "gcc-ASAN" = "gccsan", "gcc-UBSAN" = "gccsan",
           "clang-ASAN" = "clangsan", "clang-UBSAN" = "clangsan",
-          valgrind = "valgrind")
+          valgrind = "valgrind", "linux-arm64" = "arm64")
 kinds <- strsplit(Sys.getenv("KINDS", paste(names(arms), collapse = " ")), " +")[[1]]
 x <- readRDS(rds)
 x <- x[x$kind %in% intersect(names(arms), kinds), c("Package", "Version", "kind", "href")]
@@ -50,6 +50,10 @@ if ("LTO" %in% kinds) {
     more <- lto_logs()
     x <- rbind(x, more[!more$Package %in% x$Package[x$kind == "LTO"], ])
 }
+
+# The arm64 checks link to a directory on GitHub. Its check log is this file.
+x$href <- sub("^https://github.com/(r-devel/linux-arm64-checks)/tree/HEAD/(.*)$",
+              "https://raw.githubusercontent.com/\\1/HEAD/\\2/00check.log", x$href)
 
 # A package can have two rows, one for CRAN's check log (.out) and one for
 # its install log (.log). Keep one row, preferring the check log, and carry

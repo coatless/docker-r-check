@@ -63,6 +63,7 @@ set -euo pipefail
 [ $# -ge 2 ] || die "usage: $0 <flavour> <package|tarball>..."
 fl="$1"; shift
 need_image "$fl"
+PLATFORM="$(platform_of "$fl")"
 
 mode="${RCC_MODE:-regular}"
 case "$mode" in
@@ -249,7 +250,10 @@ image_id="$("$ENGINE" inspect --format '{{.Image}}' "$name" 2>/dev/null)" ||
 probe="$("$ENGINE" run --rm --platform "$PLATFORM" -e OPENBLAS_VERBOSE=2 -e BLIS_ARCH_DEBUG=1 \
     -e MKL_VERBOSE=1 \
     ${env_args[@]+"${env_args[@]}"} --entrypoint sh "$image_id" -c '
-    echo "cpu: $(sed -n "s/^model name[[:space:]]*: //p" /proc/cpuinfo | head -n 1)"
+    cpu="$(sed -n "s/^model name[[:space:]]*: //p" /proc/cpuinfo | head -n 1)"
+    # arm64 has no model name in /proc/cpuinfo.
+    [ -n "$cpu" ] || cpu="$(lscpu 2>/dev/null | sed -n "s/^Model name:[[:space:]]*//p" | head -n 1)"
+    echo "cpu: $cpu"
     /build/bin/Rscript --vanilla -e "invisible(crossprod(matrix(1, 2, 2)))" 2>&1 |
         sed -n "s/^Core: /openblas_core: /p; s/^libblis: selecting sub-configuration /blis_arch: /p; s/^MKL_VERBOSE .* architecture \\(.*\\), Lnx.*/mkl_code: \\1/p"' 2>/dev/null || true)"
 
