@@ -6,23 +6,37 @@ name: evaluate
 # same dated CRAN snapshot, and the report compares the results with CRAN's
 # own logs.
 #
-# A run takes hours, so it starts only when the branch `evaluate` is pushed,
-# for example with `git push origin HEAD:evaluate`. eval/run.env says which
-# kinds and jobs to run.
+# A run takes hours. One starts when the branch `evaluate` is pushed, for
+# example with `git push origin HEAD:evaluate`, and eval/run.env says which
+# kinds and jobs it runs. A shorter one runs every day and writes its results
+# into README.md.
 
 on:
   push:
     branches: [evaluate]
+  # The lists DAILY_KINDS names in eval/run.env. GitHub starts a scheduled
+  # run from the default branch only.
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       kinds:
         description: CRAN issue kinds to run, in place of KINDS in eval/run.env
       only:
         description: Job labels to run, in place of ONLY in eval/run.env
+      readme:
+        description: Write the results into README.md, as the daily run does
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   actions: read
+
+# One daily run at a time. Other runs do not wait for each other.
+concurrency:
+  group: evaluate-${{ github.event_name == 'schedule' && 'daily' || github.run_id }}
+  cancel-in-progress: false
 
 env:
   # Small packages of different kinds: C, more C, Fortran, C calling the
@@ -52,6 +66,11 @@ jobs:
           IN_ONLY: ${{ inputs.only }}
         run: |
           . eval/run.env
+          # The daily run takes today's lists and nothing else, whatever
+          # the rest of run.env says.
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            KINDS=$DAILY_KINDS ONLY="" BASELINE_RUN="" CONDITIONS=""
+          fi
           {
             echo "KINDS=${IN_KINDS:-$KINDS}"
             echo "ONLY=${IN_ONLY:-$ONLY}"
@@ -70,7 +89,11 @@ jobs:
           gh run download "$BASELINE_RUN" -R "$GITHUB_REPOSITORY" -n oracle -D oracle
           awk -F'\t' -v kinds=" $KINDS " 'NR == 1 || index(kinds, " " $3 " ")' oracle/targets.tsv > targets.tsv
           mv targets.tsv oracle/targets.tsv
-          echo "Baseline-run: $BASELINE_RUN" >> oracle/run.txt
+          sed -i '/^Kinds: /d' oracle/run.txt
+          {
+            echo "Kinds: $KINDS"
+            echo "Baseline-run: $BASELINE_RUN"
+          } >> oracle/run.txt
           cat oracle/run.txt
           cut -f1-3,5 oracle/targets.tsv | column -t -s $'\t'
 
@@ -133,6 +156,7 @@ jobs:
             echo "CRAN-snapshot: $SNAPSHOT"
             echo "check_issues-Last-Modified: $(sed -n 's/^[Ll]ast-[Mm]odified: //p' rds.headers | tr -d '\r')"
             echo "Fetched: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Kinds: $KINDS"
           } > run.txt
           cat run.txt
           cut -f1-3,5 targets.tsv | column -t -s $'\t' 
@@ -149,7 +173,7 @@ jobs:
               # step with the check job's own choice.
               control += row["arm"] in ("openblas", "mkl", "blis", "atlas", "nold", "arm64") or row["install_href"] != "-"
           # A long control list is split over several jobs, like any other.
-          shards = max(1, min(20, math.ceil(control / 15)))
+          shards = max(1, min(20, math.ceil(control / 8)))
           jobs = [{"arm": "reference", "targets": "reference", "label": "reference", "shard": s, "shards": shards}
                   for s in range(1, shards + 1)]
           # Lists that run in an image someone else publishes, not in an arm.
@@ -526,10 +550,56 @@ jobs:
 
       - name: compare with CRAN
         run: |
-          python3 eval/report.py oracle out baseline | tee report.md
+          python3 eval/report.py --rows rows.tsv oracle out baseline | tee report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: write the results as they would go into README.md
+        run: |
+          python3 eval/readme.py rows.tsv oracle/run.txt README.md eval/daily.tsv \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > section.md
 
       - uses: actions/upload-artifact@v4
         with:
           name: report
-          path: report.md
+          path: |
+            report.md
+            rows.tsv
+            section.md
+
+  # The daily run's results go into README.md on the branch it ran from.
+  readme:
+    needs: report
+    if: always() && needs.report.result == 'success' && (github.event_name == 'schedule' || inputs.readme)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The branch as it is now. It may have moved during the run.
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oracle
+          path: oracle
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: report
+          path: report
+
+      - name: write the results into README.md
+        run: |
+          python3 eval/readme.py report/rows.tsv oracle/run.txt README.md eval/daily.tsv \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md eval/daily.tsv
+          if git diff --cached --quiet; then
+            echo "nothing to update"
+            exit 0
+          fi
+          git commit -q -m "update the daily results in README.md"
+          # The branch may have moved again since the checkout.
+          git push || { git pull --rebase && git push; }

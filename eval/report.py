@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare the arms' check results with CRAN's check logs.
 
-    report.py <oracle-dir> <results-dir> [<earlier-results-dir>] > report.md
+    report.py [--rows <file>] <oracle-dir> <results-dir> [<earlier-results-dir>] > report.md
 
 <oracle-dir> holds targets.tsv, logs/ and run.txt from the targets job.
 <results-dir> holds one directory per arm, or per arm and kernel setting
@@ -9,6 +9,8 @@ such as blis-haswell, each with one directory per package (manifest.dcf,
 00check.log, 00install.out) and optional BUILD-FAILED and SKIPPED-* files. A directory such
 as mkl@offline holds the same checks repeated under another condition.
 <earlier-results-dir> holds the results of an earlier run to compare with.
+--rows also writes the comparison with CRAN as a tab-separated file, one row
+per package, list and job, which readme.py reads.
 """
 import csv
 import os
@@ -271,7 +273,7 @@ def same(results_a, label_a, results_b, label_b):
     return len(both), differ
 
 
-def main(oracle, results, earlier=None):
+def main(oracle, results, earlier=None, rows=None):
     every = sorted(d for d in os.listdir(results) if os.path.isdir(os.path.join(results, d)))
     labels = [d for d in every if "@" not in d]
     labels.sort(key=lambda d: d != "reference")
@@ -289,7 +291,7 @@ def main(oracle, results, earlier=None):
     out.append("## CRAN's current issues\n")
     out.append("| Package | Kind | Arm | CRAN result | Arm result | reference result | Verdict |")
     out.append("|---|---|---|---|---|---|---|")
-    issues, errors, tally = [], [], {}
+    issues, errors, tally, table = [], [], {}, []
     for t in targets:
         pkg, arm = t["Package"], t["arm"]
         lto, sign, other = t["kind"] == "LTO", sign_of(t["kind"]), t["kind"] in OTHER
@@ -311,14 +313,20 @@ def main(oracle, results, earlier=None):
             tally.setdefault(label, {}).setdefault(re.split(", (?:all|part) of it", v)[0], []).append(pkg)
             if a and t["Version"] not in a["tarball"]:
                 issues.append(f"{pkg}: CRAN checked {t['Version']}, {label} checked {a['tarball']}")
-            out.append(f"| {pkg} {t['Version']} | {t['kind']} | {label} | {short(cran, most)} | "
-                       f"{short(a['problems'], most) if a else '-'} | "
-                       f"{short(ref['problems']) if ref else '-'} | {v} |")
+            cells = [short(cran, most), short(a["problems"], most) if a else "-",
+                     short(ref["problems"]) if ref else "-", v]
+            out.append(f"| {pkg} {t['Version']} | {t['kind']} | {label} | " + " | ".join(cells) + " |")
+            table.append([t["kind"], pkg, t["Version"], label] + cells)
             theirs = first_error(os.path.join(oracle, t["log"][:-4] + ".install.log"))
             mine = first_error(os.path.join(results, label, pkg, pkg + ".Rcheck", "00install.out"))
             if (theirs or mine) and not other:
                 errors.append(f"- {pkg} ({label}): CRAN `{theirs or ('installed' if lto else 'no install log kept')}`, "
                               f"arm `{mine or ('installed' if a else 'not checked')}`")
+    if rows:
+        with open(rows, "w", newline="") as f:
+            w = csv.writer(f, delimiter="\t", lineterminator="\n")
+            w.writerow(["kind", "package", "version", "job", "cran", "here", "reference", "verdict"])
+            w.writerows(table)
     out.append("")
     out.append("Counts per arm\n")
     for label, counts in tally.items():
@@ -386,4 +394,8 @@ def main(oracle, results, earlier=None):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    args = sys.argv[1:]
+    rows = None
+    if args[:1] == ["--rows"]:
+        rows, args = args[1], args[2:]
+    main(*args[:3], rows=rows)

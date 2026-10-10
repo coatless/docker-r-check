@@ -1,0 +1,145 @@
+name: publish
+
+# Build the arms and push them to GitHub's container registry as
+# ghcr.io/<owner>/<repository>:<arm>, and again as <arm>-r<R revision> so
+# that one build can be named later. A run starts only by hand, from the
+# Actions page or with `gh workflow run publish.yml`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      arms:
+        description: Arms to publish, as a JSON list such as ["openblas","mkl"]. Empty publishes every arm.
+      r_rev:
+        description: R-devel SVN revision to build. Empty takes the newest.
+      qa_rev:
+        description: QA tree SVN revision. Empty takes the newest.
+
+permissions:
+  contents: read
+
+jobs:
+  # One R revision and one QA revision for every arm of the run.
+  pin:
+    runs-on: ubuntu-24.04
+    outputs:
+      r_rev: ${{ steps.pin.outputs.r_rev }}
+      qa_rev: ${{ steps.pin.outputs.qa_rev }}
+    steps:
+      - name: pin the revisions
+        id: pin
+        env:
+          IN_R: ${{ inputs.r_rev }}
+          IN_QA: ${{ inputs.qa_rev }}
+        run: |
+          newest() { curl -fsSL "$1" | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1; }
+          r_rev=${IN_R:-$(newest https://svn.r-project.org/R/trunk/)}
+          qa_rev=${IN_QA:-$(newest https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt/)}
+          [ -n "$r_rev" ] && [ -n "$qa_rev" ]
+          {
+            echo "r_rev=$r_rev"
+            echo "qa_rev=$qa_rev"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  image:
+    needs: pin
+    # The arm64 arm builds on an arm64 runner, the others on x86.
+    runs-on: ${{ matrix.arm == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      # Leave runners for the daily evaluation.
+      max-parallel: 6
+      matrix:
+        arm: ${{ fromJSON(inputs.arms || '["reference","openblas","atlas","mkl","blis","blisfedora","clang23","forky","nold","lto","gccsan","clangsan","valgrind","arm64"]') }}
+    env:
+      ARM: ${{ matrix.arm }}
+      R_REV: ${{ needs.pin.outputs.r_rev }}
+      QA_REV: ${{ needs.pin.outputs.qa_rev }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: reclaim disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: add swap
+        run: |
+          # Exporting the finished image takes about 15 GiB of memory, which is
+          # all a runner has. Without more swap the runner is shut down.
+          sudo fallocate -l 16G /rcc-swap
+          sudo chmod 600 /rcc-swap
+          sudo mkswap /rcc-swap > /dev/null
+          sudo swapon /rcc-swap
+          free -h
+
+      - name: build the arm
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC1090 # the arm file names its Debian suite
+          suite=$(. "docker/flavours/$ARM.env" && echo "$RCC_DEBIAN_TAG")
+          # shellcheck disable=SC1090
+          arch=$(. "docker/flavours/$ARM.env" && echo "$RCC_ARCH")
+          # The base refuses to build for anything but amd64 unless told to.
+          # The source label is what ties the image to this repository.
+          docker build --progress=plain --platform "linux/$arch" --target standalone \
+            --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
+            --build-arg DEBIAN_TAG="$suite" --build-arg RCC_FLAVOUR="$ARM" \
+            --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
+            --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.description=R-devel r$R_REV on Debian with rcheckserver, the $ARM arm for CRAN's additional checks" \
+            -t "rcc-standalone:$ARM" docker/ 2>&1 | tail -n 300
+
+      - name: what the image holds
+        run: |
+          img="rcc-standalone:$ARM"
+          {
+            echo "## $ARM"
+            echo '```'
+            docker run --rm --entrypoint cat "$img" /etc/rcheck/manifest.txt
+            echo "size on disk: $(docker images "$img" --format '{{.Size}}')"
+            echo '```'
+            echo "### packages from Debian's contrib and non-free sections"
+            echo '```'
+            docker run --rm --entrypoint sh "$img" -c \
+              "dpkg-query -W -f='\${Section}\t\${Package}\n' | grep -E '^(contrib|non-free)' | sort" || echo none
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: keep Intel's license notices with MKL
+        if: matrix.arm == 'mkl'
+        run: |
+          # Intel's license lets the MKL libraries be passed on only together
+          # with its notices, so an image without them is not pushed.
+          n=$(docker run --rm --entrypoint sh "rcc-standalone:$ARM" -c \
+            "find /opt/intel -type f -ipath '*licensing*' | tee /dev/stderr | wc -l")
+          [ "$n" -gt 0 ] || { echo "Intel's license notices are not in the image"; exit 1; }
+
+      - name: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for tag in "$ARM" "$ARM-r$R_REV"; do
+            docker tag "rcc-standalone:$ARM" "$repo:$tag"
+            docker push --quiet "$repo:$tag"
+          done
+          {
+            echo "### pushed"
+            echo '```'
+            echo "$repo:$ARM"
+            echo "$repo:$ARM-r$R_REV"
+            docker manifest inspect "$repo:$ARM" | python3 -c 'import json, sys
+          m = json.load(sys.stdin)
+          print("download size: %.1f GB" % (sum(l["size"] for l in m.get("layers", [])) / 1e9))' || true
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"

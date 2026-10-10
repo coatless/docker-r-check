@@ -3,7 +3,7 @@ name: build
 on:
   push:
     branches: [debian-blas-arms]
-    paths-ignore: [README.md, demo/**, eval/**, .github/workflows/evaluate.yml]
+    paths-ignore: [README.md, demo/**, eval/**, .github/workflows/evaluate.yml, .github/workflows/publish.yml]
   workflow_dispatch:
     inputs:
       debian_tag:
