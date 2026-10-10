@@ -1,40 +1,40 @@
-# run of 2026-10-09
+# run of 2026-10-10
 kind	package	version	job	cran	verdict
 BLIS	BFS	0.7.2	blis-fedora-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	BFS	0.7.2	blis-fedora-skx	tests testthat.R: ERROR	not reproduced
 BLIS	BFS	0.7.2	blis-fedora-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	BFS	0.7.2	blis-haswell	tests testthat.R: ERROR	not reproduced
-BLIS	BFS	0.7.2	blis-skx	tests testthat.R: ERROR	not reproduced
+BLIS	BFS	0.7.2	blis-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	BFS	0.7.2	blis-skx	tests testthat.R: ERROR	not checked
 BLIS	BFS	0.7.2	blis-zen3	tests testthat.R: ERROR	not reproduced
 BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	ISwR	2.0-12	blis-fedora-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	ISwR	2.0-12	blis-fedora-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	ISwR	2.0-12	blis-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	ISwR	2.0-12	blis-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	partly reproduced, all of it also in reference
+BLIS	ISwR	2.0-12	blis-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	not checked
 BLIS	ISwR	2.0-12	blis-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	micEconDistRay	0.1-4	blis-fedora-haswell	tests appleProdFr86_test.Rout: NOTE	reproduced
 BLIS	micEconDistRay	0.1-4	blis-fedora-skx	tests appleProdFr86_test.Rout: NOTE	reproduced
 BLIS	micEconDistRay	0.1-4	blis-fedora-zen3	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	micEconDistRay	0.1-4	blis-haswell	tests appleProdFr86_test.Rout: NOTE	not reproduced
-BLIS	micEconDistRay	0.1-4	blis-skx	tests appleProdFr86_test.Rout: NOTE	not reproduced
+BLIS	micEconDistRay	0.1-4	blis-skx	tests appleProdFr86_test.Rout: NOTE	not checked
 BLIS	micEconDistRay	0.1-4	blis-zen3	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	spatPomp	1.1.0	blis-fedora-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-fedora-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-fedora-zen3	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	spatPomp	1.1.0	blis-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
+BLIS	spatPomp	1.1.0	blis-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	not checked
 BLIS	spatPomp	1.1.0	blis-zen3	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	vaccineff	1.0.3	blis-fedora-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	vaccineff	1.0.3	blis-fedora-skx	tests testthat.R: ERROR	not reproduced
 BLIS	vaccineff	1.0.3	blis-fedora-zen3	tests testthat.R: ERROR	not reproduced
 BLIS	vaccineff	1.0.3	blis-haswell	tests testthat.R: ERROR	not reproduced
-BLIS	vaccineff	1.0.3	blis-skx	tests testthat.R: ERROR	not reproduced
+BLIS	vaccineff	1.0.3	blis-skx	tests testthat.R: ERROR	not checked
 BLIS	vaccineff	1.0.3	blis-zen3	tests testthat.R: ERROR	not reproduced
 BLIS	WpProj	0.3	blis-fedora-haswell	tests testthat.R: ERROR	reproduced
 BLIS	WpProj	0.3	blis-fedora-skx	tests testthat.R: ERROR	not reproduced
 BLIS	WpProj	0.3	blis-fedora-zen3	tests testthat.R: ERROR	reproduced
 BLIS	WpProj	0.3	blis-haswell	tests testthat.R: ERROR	reproduced
-BLIS	WpProj	0.3	blis-skx	tests testthat.R: ERROR	not reproduced
+BLIS	WpProj	0.3	blis-skx	tests testthat.R: ERROR	not checked
 BLIS	WpProj	0.3	blis-zen3	tests testthat.R: ERROR	reproduced
 clang23	RecAssoRules	1.0	clang23	whether package can be installed: ERROR	reproduced
 clang23	timesift	0.3.1	clang23	whether package can be installed: ERROR	reproduced
