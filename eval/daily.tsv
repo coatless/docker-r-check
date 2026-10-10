@@ -3,7 +3,7 @@ kind	package	version	job	cran	verdict
 BLIS	BFS	0.7.2	blis-fedora-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	BFS	0.7.2	blis-fedora-skx	tests testthat.R: ERROR	not reproduced
 BLIS	BFS	0.7.2	blis-fedora-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	BFS	0.7.2	blis-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	BFS	0.7.2	blis-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	BFS	0.7.2	blis-skx	tests testthat.R: ERROR	not checked
 BLIS	BFS	0.7.2	blis-zen3	tests testthat.R: ERROR	not reproduced
 BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
