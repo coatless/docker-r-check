@@ -2,28 +2,38 @@ name: evaluate
 
 # Check CRAN's current BLAS and clang23 issues in the arm that matches each
 # one, with the reference arm as the control, plus a fixed set of other
-# packages in every arm. All arms use the same R and QA revisions and the
-# same dated CRAN snapshot, and the report compares the results with CRAN's
-# own logs.
+# packages in every arm. All arms use the same dated CRAN snapshot, and the
+# report compares the results with CRAN's own logs.
+#
+# The arms are the published images, as the publish workflow last pushed
+# them. With IMAGES=build in eval/run.env a run builds them itself, all from
+# the same R and QA revisions, which is the way to try a change to an arm.
 #
 # A run takes hours. One starts when the branch `evaluate` is pushed, for
 # example with `git push origin HEAD:evaluate`, and eval/run.env says which
-# kinds and jobs it runs. A shorter one runs every day and writes its results
+# kinds and jobs it runs. The publish workflow starts a shorter one every
+# day, on the images it has just pushed, and that one writes its results
 # into README.md.
 
 on:
   push:
     branches: [evaluate]
-  # The lists DAILY_KINDS names in eval/run.env. GitHub starts a scheduled
-  # run from the default branch only.
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       kinds:
         description: CRAN issue kinds to run, in place of KINDS in eval/run.env
       only:
         description: Job labels to run, in place of ONLY in eval/run.env
+      images:
+        description: Pull the published images, or build the arms in the run. "default" takes IMAGES in eval/run.env.
+        type: choice
+        options: [default, published, build]
+        default: default
+      suite:
+        description: Debian suite of the arms. "default" takes SUITE in eval/run.env.
+        type: choice
+        options: [default, testing, stable]
+        default: default
       readme:
         description: Write the results into README.md, as the daily run does
         type: boolean
@@ -33,15 +43,21 @@ permissions:
   contents: read
   actions: read
 
-# One daily run at a time. Other runs do not wait for each other.
+# One run that writes README.md at a time. Other runs do not wait for each
+# other.
 concurrency:
-  group: evaluate-${{ github.event_name == 'schedule' && 'daily' || github.run_id }}
+  group: evaluate-${{ inputs.readme && 'daily' || github.run_id }}
   cancel-in-progress: false
 
 env:
   # Small packages of different kinds: C, more C, Fortran, C calling the
   # BLAS, saved test output that depends on the BLAS, and knitr vignettes.
   OTHER_PACKAGES: base64enc digest quadprog irlba maxLik jsonlite
+  # jq program for the R-devel revision of a published image. The images
+  # of 2026-10-10 have it in their description only.
+  REV_OF: >-
+    .Labels["rcheck.r-svn-rev"]
+    // ((.Labels["org.opencontainers.image.description"] // "") | capture("R-devel r(?<r>[0-9]+)").r)
 
 jobs:
   targets:
@@ -56,6 +72,8 @@ jobs:
       any_published: ${{ steps.arms.outputs.any_published }}
       conditions: ${{ steps.read.outputs.conditions }}
       baseline: ${{ steps.read.outputs.baseline }}
+      images: ${{ steps.read.outputs.images }}
+      suite: ${{ steps.read.outputs.suite }}
     steps:
       - uses: actions/checkout@v5
 
@@ -64,21 +82,32 @@ jobs:
         env:
           IN_KINDS: ${{ inputs.kinds }}
           IN_ONLY: ${{ inputs.only }}
+          IN_IMAGES: ${{ inputs.images }}
+          IN_SUITE: ${{ inputs.suite }}
+          IN_README: ${{ inputs.readme }}
         run: |
           . eval/run.env
-          # The daily run takes today's lists and nothing else, whatever
-          # the rest of run.env says.
-          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+          # A run that writes README.md takes today's lists and nothing
+          # else, whatever the rest of run.env says.
+          if [ "$IN_README" = true ]; then
             KINDS=$DAILY_KINDS ONLY="" BASELINE_RUN="" CONDITIONS=""
           fi
+          [ "${IN_IMAGES:-default}" = default ] || IMAGES=$IN_IMAGES
+          [ "${IN_SUITE:-default}" = default ] || SUITE=$IN_SUITE
+          case "$IMAGES" in published|build) ;; *) echo "IMAGES is '$IMAGES', and it must be published or build"; exit 1 ;; esac
+          case "$SUITE" in testing|stable) ;; *) echo "SUITE is '$SUITE', and it must be testing or stable"; exit 1 ;; esac
           {
             echo "KINDS=${IN_KINDS:-$KINDS}"
             echo "ONLY=${IN_ONLY:-$ONLY}"
             echo "BASELINE_RUN=$BASELINE_RUN"
+            echo "IMAGES=$IMAGES"
+            echo "SUITE=$SUITE"
           } | tee -a "$GITHUB_ENV"
           {
             echo "conditions=$CONDITIONS"
             echo "baseline=$BASELINE_RUN"
+            echo "images=$IMAGES"
+            echo "suite=$SUITE"
           } | tee -a "$GITHUB_OUTPUT"
 
       - name: take the list and CRAN's logs from an earlier run
@@ -89,9 +118,12 @@ jobs:
           gh run download "$BASELINE_RUN" -R "$GITHUB_REPOSITORY" -n oracle -D oracle
           awk -F'\t' -v kinds=" $KINDS " 'NR == 1 || index(kinds, " " $3 " ")' oracle/targets.tsv > targets.tsv
           mv targets.tsv oracle/targets.tsv
-          sed -i '/^Kinds: /d' oracle/run.txt
+          sed -i '/^Kinds: /d; /^Suite: /d; /^Images: /d; /^Images-differ: /d' oracle/run.txt
+          rm -f oracle/images.tsv
           {
             echo "Kinds: $KINDS"
+            echo "Suite: $SUITE"
+            echo "Images: $IMAGES"
             echo "Baseline-run: $BASELINE_RUN"
           } >> oracle/run.txt
           cat oracle/run.txt
@@ -104,6 +136,14 @@ jobs:
             r_rev=$(sed -n 's/^R-revision: //p' oracle/run.txt)
             qa_rev=$(sed -n 's/^QA-revision: //p' oracle/run.txt)
             snapshot=$(sed -n 's/^CRAN-snapshot: //p' oracle/run.txt)
+          elif [ "$IMAGES" = published ]; then
+            # The revisions the published reference image was built from.
+            # The other arms are compared with them further down.
+            name=reference; [ "$SUITE" = testing ] || name="reference-$SUITE"
+            skopeo inspect --no-tags "docker://ghcr.io/${GITHUB_REPOSITORY,,}:$name" > image.json
+            r_rev=$(jq -r "$REV_OF" image.json)
+            qa_rev=$(jq -r '.Labels["rcheck.qa-svn-rev"] // "unknown"' image.json)
+            snapshot=$(date -u -d '1 day ago' +%Y-%m-%d)
           else
             r_rev=$(curl -fsSL https://svn.r-project.org/R/trunk/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
             qa_rev=$(curl -fsSL https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
@@ -157,6 +197,8 @@ jobs:
             echo "check_issues-Last-Modified: $(sed -n 's/^[Ll]ast-[Mm]odified: //p' rds.headers | tr -d '\r')"
             echo "Fetched: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "Kinds: $KINDS"
+            echo "Suite: $SUITE"
+            echo "Images: $IMAGES"
           } > run.txt
           cat run.txt
           cut -f1-3,5 targets.tsv | column -t -s $'\t' 
@@ -165,7 +207,7 @@ jobs:
         id: arms
         run: |
           python3 - <<'EOF' | tee -a "$GITHUB_OUTPUT"
-          import csv, json, math, os
+          import csv, json, math, os, re
           count, control = {}, 0
           for row in csv.DictReader(open("oracle/targets.tsv"), delimiter="\t"):
               count[row["arm"]] = count.get(row["arm"], 0) + 1
@@ -206,6 +248,11 @@ jobs:
               jobs += [{"arm": a, "targets": "blis", "label": f"{label}-{k}", "blis_arch": k,
                         "shard": 1, "shards": 1}
                        for a, label in builds for k in ("zen3", "haswell", "skx")]
+          # An arm that does not build on the run's Debian suite has no job.
+          def builds_here(arm):
+              m = re.search(r'^RCC_SUITES="([^"]*)"', open(f"docker/flavours/{arm}.env").read(), re.M)
+              return os.environ["SUITE"] in (m.group(1) if m else "testing stable").split()
+          jobs = [j for j in jobs if builds_here(j["arm"])]
           only = os.environ.get("ONLY", "").split()
           keep = lambda j: not only or j["label"] in only or f'{j["label"]}#{j["shard"]}' in only
           jobs, published = [j for j in jobs if keep(j)], [j for j in published if keep(j)]
@@ -215,6 +262,46 @@ jobs:
           print("any_arm=" + ("yes" if jobs else "no"))
           print("any_published=" + ("yes" if published else "no"))
           EOF
+
+      - name: find the published images
+        if: env.IMAGES == 'published' && steps.arms.outputs.any_arm == 'yes'
+        env:
+          MATRIX: ${{ steps.arms.outputs.matrix }}
+          R_REV: ${{ steps.pin.outputs.r_rev }}
+        run: |
+          # Each arm's image by its digest, so that every job of the run
+          # uses the same one even if a new one is pushed meanwhile.
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf 'arm\timage\tr_rev\tqa_rev\tbuilt\n' > oracle/images.tsv
+          differ=""
+          for arm in $(jq -r '.include[].arm' <<<"$MATRIX" | sort -u); do
+            name="$arm"; [ "$SUITE" = testing ] || name="$arm-$SUITE"
+            # A run on an earlier run's revisions takes the images of that
+            # R revision.
+            [ -z "$BASELINE_RUN" ] || name="$name-r$R_REV"
+            # shellcheck disable=SC1090 # the arm file names its architecture
+            arch=$(. "docker/flavours/$arm.env" && echo "$RCC_ARCH")
+            if ! skopeo inspect --no-tags --override-os linux --override-arch "$arch" "docker://$repo:$name" > image.json; then
+              echo "$repo:$name is not published. IMAGES=build in eval/run.env builds the arms in the run."
+              exit 1
+            fi
+            # The tag says which suite an image should be. Its label says
+            # which one it was built on. An image without the label was
+            # pushed before the publish workflow recorded the suite.
+            suite=$(jq -r '.Labels["rcheck.suite"] // "an unrecorded suite"' image.json)
+            if [ "$suite" != "$SUITE" ]; then
+              echo "$repo:$name was built on Debian $suite, and this run is for $SUITE."
+              exit 1
+            fi
+            rev=$(jq -r "$REV_OF" image.json)
+            built=$(jq -r '.Labels["rcheck.built"] // .Created[0:10]' image.json)
+            printf '%s\t%s\t%s\t%s\t%s\n' "$arm" "$repo@$(jq -r .Digest image.json)" "$rev" \
+              "$(jq -r '.Labels["rcheck.qa-svn-rev"] // "unknown"' image.json)" "$built" >> oracle/images.tsv
+            [ "$rev" = "$R_REV" ] || differ="$differ, $arm (r$rev, built $built)"
+          done
+          column -t -s $'\t' oracle/images.tsv
+          # An arm whose last build failed still has its image from before.
+          [ -z "$differ" ] || echo "Images-differ: ${differ#, }" | tee -a oracle/run.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -245,6 +332,8 @@ jobs:
       R_REV: ${{ needs.targets.outputs.r_rev }}
       QA_REV: ${{ needs.targets.outputs.qa_rev }}
       SNAPSHOT: ${{ needs.targets.outputs.snapshot }}
+      IMAGES: ${{ needs.targets.outputs.images }}
+      SUITE: ${{ needs.targets.outputs.suite }}
     steps:
       - uses: actions/checkout@v5
 
@@ -287,26 +376,34 @@ jobs:
           sudo swapon /rcc-swap
           free -h
 
-      - name: build the arm
+      - name: pull or build the arm
         if: env.SKIP != '1'
         run: |
           set -o pipefail
-          # Every job downloads the same sources. Do not start them all in
-          # the same second.
-          sleep $((RANDOM % 120))
-          # shellcheck disable=SC1090 # the arm file names its Debian suite
-          suite=$(. "docker/flavours/$ARM.env" && echo "$RCC_DEBIAN_TAG")
-          # shellcheck disable=SC1090
-          arch=$(. "docker/flavours/$ARM.env" && echo "$RCC_ARCH")
-          # The base refuses to build for anything but amd64 unless told to.
-          if ! docker build --progress=plain --platform "linux/$arch" --target standalone \
-                 --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
-                 --build-arg DEBIAN_TAG="$suite" --build-arg RCC_FLAVOUR="$ARM" \
-                 --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
-                 --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
-                 -t "rcc-standalone:$ARM" docker/ 2>&1 | tee build.log; then
-            tail -n 20 build.log > "out/$LABEL/BUILD-FAILED"
-            exit 1
+          if [ "$IMAGES" = published ]; then
+            # The image the targets job found for this arm.
+            image=$(awk -F'\t' -v a="$ARM" '$1 == a {print $2}' oracle/images.tsv)
+            if [ -z "$image" ] || ! docker pull --quiet "$image" 2>&1 | tee build.log; then
+              { echo "could not pull the published image of $ARM: $image"; tail -n 20 build.log; } > "out/$LABEL/BUILD-FAILED"
+              exit 1
+            fi
+            docker tag "$image" "rcc-standalone:$ARM"
+          else
+            # Every job downloads the same sources. Do not start them all in
+            # the same second.
+            sleep $((RANDOM % 120))
+            # shellcheck disable=SC1090 # the arm file names its architecture
+            arch=$(. "docker/flavours/$ARM.env" && echo "$RCC_ARCH")
+            # The base refuses to build for anything but amd64 unless told to.
+            if ! docker build --progress=plain --platform "linux/$arch" --target standalone \
+                   --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
+                   --build-arg DEBIAN_TAG="$SUITE" --build-arg RCC_FLAVOUR="$ARM" \
+                   --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
+                   --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
+                   -t "rcc-standalone:$ARM" docker/ 2>&1 | tee build.log; then
+              tail -n 20 build.log > "out/$LABEL/BUILD-FAILED"
+              exit 1
+            fi
           fi
           {
             docker run --rm --entrypoint cat "rcc-standalone:$ARM" /etc/rcheck/manifest.txt
@@ -569,7 +666,7 @@ jobs:
   # The daily run's results go into README.md on the branch it ran from.
   readme:
     needs: report
-    if: always() && needs.report.result == 'success' && (github.event_name == 'schedule' || inputs.readme)
+    if: always() && needs.report.result == 'success' && inputs.readme
     runs-on: ubuntu-24.04
     permissions:
       contents: write

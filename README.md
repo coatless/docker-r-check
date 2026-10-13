@@ -5,11 +5,11 @@ machine, among them the BLAS, clang 23, noLD, LTO, sanitizer, valgrind and
 donttest checks, on x86 and on arm64.
 
 Each image is called an *arm*. An arm is R-devel built with `build-R` and
-`Rconf` from the [CRAN QA tree][qa-tree], on a Debian base that gets its
-system libraries from AASC's [`rcheckserver`][aasc]. An arm differs from the
-`reference` arm in the BLAS, the compilers, a configure option, the Debian
-release or the CPU architecture, so a difference in a check result can be
-traced to that change.
+`Rconf` from the [CRAN QA tree][qa-tree], on Debian testing with the system
+libraries of AASC's [`rcheckserver`][aasc]. Every arm is rebuilt from scratch
+each day and published. An arm differs from the `reference` arm in the BLAS,
+the compilers, a configure option or the CPU architecture, so a difference in
+a check result can be traced to that change.
 
 This is a fork of Simon Urbanek's [docker-r-check][docker-r-check]. His
 build-and-mount workflow, described in [README](README), works as before. The
@@ -58,33 +58,30 @@ flowchart BT
     build --> nold
     build --> lto
     build --> san["gccsan, clangsan,<br/>valgrind"]
-    build --> forky
     build --> arm64
 ```
 
-There are fourteen arms. Each one changes a single thing against `reference`,
-except `blisfedora`, which also needs a newer Debian for its BLIS.
+There are thirteen arms. Each one changes a single thing against `reference`.
 
 | Arm | What it changes | Passed to `Rconf` |
 |---|---|---|
-| `reference` | Nothing. R's own BLAS and LAPACK, GCC 14, Debian trixie. | `-bi` |
-| `openblas` | Serial OpenBLAS 0.3.29, with its LAPACK 3.12.0 | `-bo` |
+| `reference` | Nothing. R's own BLAS and LAPACK, Debian's GCC. | `-bi` |
+| `openblas` | Serial OpenBLAS, with its LAPACK | `-bo` |
 | `atlas` | ATLAS 3.10.3, with its LAPACK 3.11.0 | `--with-blas=-lblas --with-lapack=-llapack` |
 | `mkl` | Serial Intel MKL 2026.1, BLAS and LAPACK | `-bm` |
 | `blis` | Serial BLIS 2.1, with Debian's LAPACK 3.12.1 | `--with-blas=-lblas --with-lapack=-llapack` |
-| `blisfedora` | The BLIS binary from Fedora's `blis-2.0-5` package, which is the one CRAN uses, on Debian forky | `--with-blas=-lblas --with-lapack=-llapack` |
+| `blisfedora` | The BLIS binary from Fedora's `blis-2.0-5` package, which is the one CRAN uses | `--with-blas=-lblas --with-lapack=-llapack` |
 | `clang23` | clang 23 and flang 23, with libc++ | `-fc/23 -bi` |
 | `nold` | R built without long double | `-bi --disable-long-double` |
 | `lto` | R and every package it installs built with link-time optimization | `-bi --enable-lto` |
 | `gccsan` | GCC's address and undefined behavior sanitizers | `-bi -x` |
 | `clangsan` | clang 23 with its address and undefined behavior sanitizers | `-fc/23 -bi -x` |
 | `valgrind` | R with valgrind instrumentation, and checks run under valgrind | `-bi -v` |
-| `forky` | Debian forky, which has glibc 2.43 | `-bi` |
 | `arm64` | The arm64 architecture | `-bi` |
 
-`reference` is the control. All fourteen build on GitHub's runners, `arm64`
-on an arm64 one and the rest on x86. The first three also build on a Mac
-under Rosetta. A build fails unless R reports the BLAS the arm is named for,
+`reference` is the control. All thirteen build on GitHub's runners, `arm64`
+on an arm64 one and the rest on x86. A build fails unless R reports the BLAS
+the arm is named for,
 so an image cannot carry a different BLAS than its name says. The `lto` build
 also fails unless the linker catches a type mismatch planted between two
 files.
@@ -97,6 +94,74 @@ and BLIS joined the list. You can fetch the current list in R.
 x <- readRDS(url("https://cran.r-project.org/web/checks/check_issues.rds"))
 table(x$kind)
 ```
+
+## Debian testing and stable
+
+The arms build on Debian testing by default. CRAN's own check machines run
+testing, and `rcheckserver` is kept current for it. In October 2026 testing
+is also closer than stable to the Fedora machine behind CRAN's additional
+checks, except in its OpenBLAS.
+
+| | Debian testing | Debian stable (trixie) | CRAN's machine, Fedora 44 |
+|---|---|---|---|
+| GCC | 16.2 | 14.2 | 16.2 |
+| glibc | 2.43 | 2.41 | 2.43 |
+| OpenBLAS | 0.3.34 | 0.3.29 | 0.3.29 |
+| BLIS | 2.1 | 1.1 | 2.0 |
+| valgrind | 3.27 | 3.24 | 3.27 |
+
+On 2026-10-13 the comparison described below ran once on each suite, with
+the same R-devel revision and the same lists. Every entry of CRAN's lists had
+the same result on both but `BFS`, whose tests ask a web service that
+answered HTTP 429 in one arm of each run. That includes the two OpenBLAS
+entries that reproduce, so the newer OpenBLAS has made no difference so far.
+
+Every arm but `blisfedora` also builds on Debian stable. `RCC_SUITE=stable`
+selects it for `01-build.sh` and `01-pull.sh`, and `--build-arg
+DEBIAN_TAG=stable` for `docker build`.
+
+```sh
+RCC_SUITE=stable demo/01-build.sh reference openblas
+```
+
+`blisfedora` loads a Fedora binary that needs the glibc of testing. On stable
+the `blis` arm fetches testing's BLIS 2.1, and the two clang 23 arms use
+apt.llvm.org's repository for the release. On testing they use its repository
+for unstable, because it has none for testing. An image's manifest names its
+suite, and `demo/02-inspect.sh` prints it.
+
+## The daily build
+
+Every day the [publish workflow](.github/workflows/publish.yml) builds each
+arm from scratch and pushes it to [GitHub's container registry][ghcr]. A
+build starts from Debian's testing image, installs `rcheckserver`, checks out
+the newest R-devel and QA revisions and builds R. Nothing is reused from the
+day before, so a new `rcheckserver` or a changed Debian package is in the
+next day's images.
+
+An image is pushed only after R has built and reports the arm's BLAS. On a
+day when an arm does not build, its image from the day before stays in place.
+Each image has three tags.
+
+| Tag | Which image |
+|---|---|
+| `openblas` | The newest build of the arm |
+| `openblas-2026-10-14` | The build of that day |
+| `openblas-r90668` | The build of that R-devel revision |
+
+The workflow deletes images that are more than 30 days old. The repository
+variable `RCC_KEEP_DAYS` changes that to 60, 90 or `never`. The image an
+arm's own tag points at is kept however old it is. Started by hand, the
+workflow can also build on Debian stable, and those tags read
+`openblas-stable`, `openblas-stable-2026-10-14` and so on.
+
+Once the images are pushed, the workflow starts the comparison described in
+the next section, on those images.
+
+Checks reuse nothing either. Each check runs in a new container, which is
+removed when its results have been copied out. `RCC_LIBRARY_CACHE=1` is the
+one exception. It keeps the installed dependencies in a Docker volume tied to
+the image, so a later check in the same image does not compile them again.
 
 ## How the arms compare with CRAN
 
@@ -179,7 +244,7 @@ These entries changed since the run of 2026-10-12.
 ### Every list, 2026-10-04 to 2026-10-07
 
 Over these four days the workflow went through every list once, 350 entries
-in all.
+in all. The arms were then built on Debian stable, with GCC 14.
 
 | CRAN's list | Packages | What the arms showed |
 |---|---|---|
@@ -211,7 +276,9 @@ built here. Ten of CRAN's 11 musl failures reproduce in the
 list, 45 show some or all of CRAN's findings in [r-hub's][rhub] `rchk` image.
 
 Pushing a branch named `evaluate` starts a run, and `eval/run.env` says which
-lists it covers. A full run keeps GitHub's runners busy for several hours.
+lists it covers. It pulls the published images, or with `IMAGES="build"`
+builds the arms itself, which is the way to try a change to an arm. A full
+run keeps GitHub's runners busy for several hours.
 
 ## Repeating the checks
 
@@ -244,15 +311,16 @@ arms.
 |---|---|
 | `00-preflight.sh` | Confirms the engine can run amd64 containers and says whether they run natively, under Rosetta or under QEMU. |
 | `01-build.sh <arm>...` | Builds `rcc-standalone:<arm>` with R and the QA tree pinned to fixed SVN revisions. |
-| `01-pull.sh <arm>...` | Pulls the published image of each arm in place of building it, and names it `rcc-standalone:<arm>`. `RCC_R_REV` picks the build of one R-devel revision. |
+| `01-pull.sh <arm>...` | Pulls the newest published image of each arm in place of building it, and names it `rcc-standalone:<arm>`. `RCC_IMAGE_DATE` picks the build of one day and `RCC_R_REV` the build of one R-devel revision. |
 | `02-inspect.sh <arm>...` | Prints what the image recorded at build time and the BLAS and LAPACK that R loads. |
 | `03-check.sh <arm> <pkg>...` | Checks CRAN packages or local tarballs through the image's entrypoint. Writes the `.Rcheck` directory and a `manifest.dcf` to `results/<arm>/<pkg>/`. |
 | `04-compare.sh "<arms>" <pkg>...` | Runs `03-check.sh` in each arm from one dated snapshot, then diffs every `00check.log` against the first arm's. |
 
 `01-pull.sh` pulls the [published images][images], about 9 GB each. To build
-an arm yourself, run `01-build.sh` in its place. With
-`R_SVN_REV=90653 QA_SVN_REV=6968` in front, it builds the R-devel revision the
-published images have. A build also needs BuildKit and 8 GB of engine memory.
+an arm yourself, run `01-build.sh` in its place. It builds R-devel r90668
+unless `R_SVN_REV` and `QA_SVN_REV` name other revisions, such as the ones in
+a published image's manifest. A build also needs BuildKit and 8 GB of engine
+memory.
 
 `04-compare.sh` checks one tarball in each arm, with dependencies from one
 dated CRAN snapshot, and diffs the logs.
@@ -302,6 +370,7 @@ A few environment variables change how the scripts behave.
 | `RCC_LIBRARY_CACHE=1` | Keeps installed dependencies in a Docker volume so the next run skips compiling them. |
 | `RCC_ISOLATE=1` | Checks in two containers, the second cut off and read-only. `RCC_MEMORY` sets its memory limit. |
 | `RCC_NETWORK=none` | Cuts the network off during the check. Use it after a run with `RCC_LIBRARY_CACHE=1` has installed the dependencies. |
+| `RCC_SUITE=stable` | Builds or pulls the arms on Debian stable. The default is `testing`. |
 | `RCC_ENGINE=podman` | Runs the scripts with Podman in place of Docker. |
 | `RCC_COMPARE_ONLY=1` | Makes `04-compare.sh` compare earlier results without running the checks again. |
 | `R_SVN_REV`, `QA_SVN_REV`, `RCC_JOBS` | The pinned revisions and the `make -j` level for `01-build.sh`. |
@@ -331,8 +400,8 @@ builds an arm from the repository root.
 
 ```sh
 docker build --platform linux/amd64 --target standalone \
-  --build-arg DEBIAN_TAG=trixie --build-arg RCC_FLAVOUR=openblas \
-  --build-arg R_SVN_REV=90653 --build-arg QA_SVN_REV=6968 \
+  --build-arg DEBIAN_TAG=testing --build-arg RCC_FLAVOUR=openblas \
+  --build-arg R_SVN_REV=90668 --build-arg QA_SVN_REV=6971 \
   --build-arg MAKEFLAGS=-j8 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
   -t rcc-standalone:openblas docker/
 ```
@@ -353,8 +422,7 @@ Arguments after the image name go to `check_CRAN_incoming`. Add
 `-e RCC_RUNNER=dir` to check through `tools::check_packages_in_dir()`.
 Results are in `/build/CRAN/<pkg>.Rcheck` inside the container. Do not mount
 anything over `/build`, because R is installed there in the `standalone`
-image. Pass `DEBIAN_TAG=trixie` explicitly, because the Dockerfile defaults
-to `unstable`.
+image. `DEBIAN_TAG` is `testing` unless you pass `stable`.
 
 ## Checking code you do not trust
 
@@ -385,7 +453,8 @@ the scripts support, or a virtual machine.
 ## On my Apple Silicon Mac
 
 I built and ran the `reference`, `openblas` and `atlas` arms on an M2 Max,
-and compared `maxLik` 1.5-2.2 in the first two. Docker Desktop runs
+and compared `maxLik` 1.5-2.2 in the first two. That was on Debian stable,
+before the arms moved to testing. Docker Desktop runs
 the amd64 images through Rosetta once "Use Rosetta for x86_64/amd64
 emulation" is switched on in its [settings][docker-settings], and
 `demo/00-preflight.sh` checks that setting before you start a long build. A
@@ -421,9 +490,9 @@ arm64 runners so far.
 
 The `atlas` arm is the one arm that does not keep `rcheckserver` whole.
 [ATLAS][atlas] has left Debian, so the arm installs the packages from
-bookworm. Trixie's `liblapacke` conflicts with them, so I remove `liblapacke`,
+bookworm. Debian's current `liblapacke` conflicts with them, so I remove `liblapacke`,
 `liblapacke-dev` and the `rcheckserver` metapackage. Everything else that
-`rcheckserver` installed stays. R links with `-lblas -llapack` and uses
+`rcheckserver` installed stays. This holds on testing and on stable. R links with `-lblas -llapack` and uses
 ATLAS's own LAPACK 3.11.0, because R's LAPACK calls a routine that ATLAS does
 not have. CRAN no longer runs ATLAS checks regularly, so there is little to
 compare this arm against.
@@ -451,40 +520,40 @@ dependency step.
 The `lto` arm builds every package with LTO, dependencies included. CRAN
 builds R with `--enable-lto=R` and installs only the package under test with
 `--use-LTO`. The package under test gets the same flags either way. The arm
-uses Debian's GCC 14, and CRAN's logs were made with the Fedora GCC of their
-day.
+uses Debian's GCC, which is 16 on testing, and CRAN's logs were made with the
+Fedora GCC of their day.
 
 The sanitizer arms compile every dependency with the sanitizers too, so an
 error can come from a dependency. CRAN's machine instruments few of them.
 Those arms and `valgrind` use the check script that takes several packages at
 once, because the other one ran out of time installing dependencies. Under
 `valgrind`, a test that compares its output with a saved copy gets a NOTE,
-since valgrind's banner is in the output. Debian has valgrind 3.24, and CRAN
-uses 3.27.
+since valgrind's banner is in the output.
 
 The `arm64` arm lacks `quarto` and `openbugs`, which have no arm64 packages.
 CRAN's own arm64 checks use the R release on Ubuntu.
 
 `blisfedora` is not a pure Debian arm. It loads a Fedora binary that needs
-glibc 2.43, so it builds on Debian forky. I kept it because it shows which of
-CRAN's BLIS results come from Fedora's build of BLIS.
+glibc 2.43, so it builds on Debian testing only. I kept it because it shows
+which of CRAN's BLIS results come from Fedora's build of BLIS.
 
-In the `clang23` arm a few packages cannot be checked. Debian builds its C++
-system libraries with libstdc++, so `terra`, `pdftools` and the packages that
-need them do not install with libc++. CRAN's machine has libc++ builds of
-those libraries.
+In the `clang23` arm some packages cannot be checked. Debian builds its C++
+system libraries with libstdc++, so a package that calls one of them from C++
+does not load when it is compiled with libc++. On stable `terra`, `pdftools`
+and `otelsdk` do not install. On testing `sf` and `magick` do not install
+either, and with them every package that needs `sf`. CRAN's machine has
+libc++ builds of those libraries. The `clangsan` arm uses libc++ too.
 
 The image's entrypoint always exits 0, so `03-check.sh` reads the result from
 `00check.log`.
 
-Builds pin R-devel and the QA tree by SVN revision. Debian packages are not
-pinned, and neither is clang 23, so two builds made a week apart can differ.
+Debian testing changes every day. A build pins R-devel and the QA tree by SVN
+revision, but not the Debian packages and not clang 23, so two builds made a
+day apart can differ. Each image's manifest records the revisions, the suite
+and the versions of GCC and `rcheckserver` it was built with.
 
-The published images are not rebuilt automatically. Each has a second tag
-with its R-devel revision, such as `openblas-r90653`, and falls behind R-devel
-until the publish workflow runs again. The `mkl` image contains Intel's MKL
-libraries together with Intel's license notices, and the publish workflow
-does not push it without them. The arms apply only to the `standalone` image,
+The `mkl` image contains Intel's MKL libraries together with Intel's license
+notices, and the publish workflow does not push it without them. The arms apply only to the `standalone` image,
 and the original build-and-mount workflow does not use them yet.
 
 ## Other containers
@@ -501,25 +570,27 @@ against CRAN's results.
 
 Two test scripts check the BLAS setup against real Debian packages, including
 cases that should fail. A third checks the LTO test with a stand-in for R.
-Each runs in a fresh container.
+Each runs in a fresh container, and `debian:stable-slim` in place of
+`debian:testing-slim` runs it on Debian stable.
 
 ```sh
 docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo \
-  debian:trixie-slim bash tests/blas-wiring-test.sh
+  debian:testing-slim bash tests/blas-wiring-test.sh
 docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo \
-  debian:trixie-slim bash tests/flavour-test.sh
+  debian:testing-slim bash tests/flavour-test.sh
 docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo \
-  debian:trixie-slim bash tests/lto-assert-test.sh
+  debian:testing-slim bash tests/lto-assert-test.sh
 ```
 
-The [build workflow](.github/workflows/build.yml) runs the tests, builds the
-base image, then builds each arm and runs `R CMD check` on `digest` and
-`jsonlite` in it. That last step only confirms that a check runs to a
+The [build workflow](.github/workflows/build.yml) runs the tests on both
+suites, builds the base image, then builds each arm on testing and on stable
+and runs `R CMD check` on `digest` and `jsonlite` in it. That last step only confirms that a check runs to a
 `Status:` line. The [evaluate workflow](.github/workflows/evaluate.yml) is
 the comparison with CRAN described above, and it checks packages through the
 images' entrypoint. The [publish workflow](.github/workflows/publish.yml)
-builds the arms from one R-devel revision and pushes them to
-[GitHub's container registry][ghcr], and it runs only when started by hand. All three add swap
+is the daily build. It builds the arms from one R-devel revision, pushes
+them to [GitHub's container registry][ghcr] and starts the evaluate workflow
+on them. All three add swap
 on the runner before a build, because exporting a finished image takes about
 15 GB of memory and a GitHub runner has 16.
 
@@ -539,8 +610,9 @@ docker/fetch-recommended.sh  fetches R's recommended packages over HTTPS
 docker/entry-build-r.sh      runs build-R and fails if the build or make check does
 docker/entry-pkgcheck.sh     the check entrypoint (check_CRAN_incoming -n)
 demo/                        the scripts described above
-eval/                        picks CRAN's current issues, runs them and writes the comparison
-tests/                       tests for the BLAS and LTO setup, run in debian:trixie-slim
+eval/                        picks CRAN's current issues, runs them and writes the comparison,
+                             and deletes old published images
+tests/                       tests for the BLAS and LTO setup, run in Debian's testing and stable images
 build-images.sh, build-R.sh, chk-pkgs.sh   the original host-mounted workflow
 ```
 

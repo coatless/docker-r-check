@@ -1,31 +1,71 @@
 name: publish
 
-# Build the arms and push them to GitHub's container registry as
-# ghcr.io/<owner>/<repository>:<arm>, and again as <arm>-r<R revision> so
-# that one build can be named later. A run starts only by hand, from the
-# Actions page or with `gh workflow run publish.yml`.
+# Build every arm from scratch and push it to GitHub's container registry as
+# ghcr.io/<owner>/<repository>:<arm>. Each image is also tagged
+# <arm>-<date> and <arm>-r<R revision>, so that one build can be named later.
+#
+# A run starts every day and builds on Debian testing, with the newest
+# R-devel and QA revisions. It then starts the evaluate workflow on the new
+# images and deletes images that are older than KEEP_DAYS.
+#
+# A run started by hand, from the Actions page or with
+# `gh workflow run publish.yml`, can build on Debian stable. Those images are
+# tagged <arm>-stable, <arm>-stable-<date> and <arm>-stable-r<R revision>.
 
 on:
+  # GitHub starts a scheduled run from the default branch only, and often
+  # hours after the time given here.
+  schedule:
+    - cron: "17 18 * * *"
   workflow_dispatch:
     inputs:
       arms:
-        description: Arms to publish, as a JSON list such as ["openblas","mkl"]. Empty publishes every arm.
+        description: Arms to publish, as a list such as "openblas mkl". Empty publishes every arm.
+      suite:
+        description: Debian suite to build on
+        type: choice
+        options: [testing, stable]
+        default: testing
       r_rev:
         description: R-devel SVN revision to build. Empty takes the newest.
       qa_rev:
         description: QA tree SVN revision. Empty takes the newest.
+      keep_days:
+        description: Delete images older than this many days. "default" takes the repository variable RCC_KEEP_DAYS, or 30.
+        type: choice
+        options: [default, "30", "60", "90", never]
+        default: default
+      evaluate:
+        description: Start the evaluate workflow on the new images, as the daily run does
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# One publish run for a suite at a time, so two runs do not move the same
+# tags in turn.
+concurrency:
+  group: publish-${{ inputs.suite || 'testing' }}
+  cancel-in-progress: false
+
+env:
+  SUITE: ${{ inputs.suite || 'testing' }}
+  # How long an image is kept, in days: 30, 60, 90 or never.
+  KEEP_DAYS: ${{ (inputs.keep_days != 'default' && inputs.keep_days) || vars.RCC_KEEP_DAYS || '30' }}
+
 jobs:
-  # One R revision and one QA revision for every arm of the run.
+  # One R revision, one QA revision and one date for every arm of the run.
   pin:
     runs-on: ubuntu-24.04
     outputs:
       r_rev: ${{ steps.pin.outputs.r_rev }}
       qa_rev: ${{ steps.pin.outputs.qa_rev }}
+      date: ${{ steps.pin.outputs.date }}
+      arms: ${{ steps.arms.outputs.arms }}
     steps:
+      - uses: actions/checkout@v5
+
       - name: pin the revisions
         id: pin
         env:
@@ -39,7 +79,26 @@ jobs:
           {
             echo "r_rev=$r_rev"
             echo "qa_rev=$qa_rev"
+            echo "date=$(date -u +%Y-%m-%d)"
           } | tee -a "$GITHUB_OUTPUT"
+
+      - name: choose the arms
+        id: arms
+        env:
+          IN_ARMS: ${{ inputs.arms }}
+        run: |
+          # Every arm that builds on this suite, or the ones asked for.
+          arms=""
+          for f in docker/flavours/*.env; do
+            arm=$(basename "$f" .env)
+            # shellcheck disable=SC1090 # the arm file names its suites
+            suites=$(. "$f" && echo "${RCC_SUITES:-testing stable}")
+            case " $suites " in *" $SUITE "*) ;; *) echo "$arm does not build on $SUITE"; continue ;; esac
+            case " ${IN_ARMS//[^a-z0-9]/ } " in "  "|*" $arm "*) arms="$arms $arm" ;; esac
+          done
+          [ -n "$arms" ] || { echo "no arm to build"; exit 1; }
+          # shellcheck disable=SC2086 # the list is split on purpose
+          echo "arms=$(printf '%s\n' $arms | jq -R . | jq -cs .)" | tee -a "$GITHUB_OUTPUT"
 
   image:
     needs: pin
@@ -51,14 +110,16 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
-      # Leave runners for the daily evaluation.
-      max-parallel: 6
+      # GitHub gives up on a job that has not got a runner after 15 minutes,
+      # so do not ask for more runners at once than it hands out.
+      max-parallel: 8
       matrix:
-        arm: ${{ fromJSON(inputs.arms || '["reference","openblas","atlas","mkl","blis","blisfedora","clang23","forky","nold","lto","gccsan","clangsan","valgrind","arm64"]') }}
+        arm: ${{ fromJSON(needs.pin.outputs.arms) }}
     env:
       ARM: ${{ matrix.arm }}
       R_REV: ${{ needs.pin.outputs.r_rev }}
       QA_REV: ${{ needs.pin.outputs.qa_rev }}
+      DATE: ${{ needs.pin.outputs.date }}
     steps:
       - uses: actions/checkout@v5
 
@@ -82,27 +143,35 @@ jobs:
       - name: build the arm
         run: |
           set -o pipefail
-          # shellcheck disable=SC1090 # the arm file names its Debian suite
-          suite=$(. "docker/flavours/$ARM.env" && echo "$RCC_DEBIAN_TAG")
-          # shellcheck disable=SC1090
+          # Every job downloads the same sources. Do not start them all in
+          # the same second.
+          sleep $((RANDOM % 90))
+          # shellcheck disable=SC1090 # the arm file names its architecture
           arch=$(. "docker/flavours/$ARM.env" && echo "$RCC_ARCH")
           # The base refuses to build for anything but amd64 unless told to.
-          # The source label is what ties the image to this repository.
+          # The source label is what ties the image to this repository, and
+          # the evaluate workflow reads the revisions and the suite from the
+          # other labels.
           docker build --progress=plain --platform "linux/$arch" --target standalone \
             --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
-            --build-arg DEBIAN_TAG="$suite" --build-arg RCC_FLAVOUR="$ARM" \
+            --build-arg DEBIAN_TAG="$SUITE" --build-arg RCC_FLAVOUR="$ARM" \
             --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
-            --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
+            --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$DATE" \
             --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --label "org.opencontainers.image.description=R-devel r$R_REV on Debian with rcheckserver, the $ARM arm for CRAN's additional checks" \
+            --label "org.opencontainers.image.version=r$R_REV" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label "org.opencontainers.image.description=R-devel r$R_REV on Debian $SUITE with rcheckserver, the $ARM arm for CRAN's additional checks" \
+            --label "rcheck.arm=$ARM" --label "rcheck.suite=$SUITE" \
+            --label "rcheck.r-svn-rev=$R_REV" --label "rcheck.qa-svn-rev=$QA_REV" \
+            --label "rcheck.built=$DATE" \
             -t "rcc-standalone:$ARM" docker/ 2>&1 | tail -n 300
 
       - name: what the image holds
         run: |
           img="rcc-standalone:$ARM"
           {
-            echo "## $ARM"
+            echo "## $ARM on Debian $SUITE"
             echo '```'
             docker run --rm --entrypoint cat "$img" /etc/rcheck/manifest.txt
             echo "size on disk: $(docker images "$img" --format '{{.Size}}')"
@@ -128,18 +197,60 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          name="$ARM"; [ "$SUITE" = testing ] || name="$ARM-$SUITE"
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          for tag in "$ARM" "$ARM-r$R_REV"; do
+          # The dated tags go first. The tag the evaluation and 01-pull.sh
+          # use moves last, once the others are in place.
+          for tag in "$name-$DATE" "$name-r$R_REV" "$name"; do
             docker tag "rcc-standalone:$ARM" "$repo:$tag"
             docker push --quiet "$repo:$tag"
           done
           {
             echo "### pushed"
             echo '```'
-            echo "$repo:$ARM"
-            echo "$repo:$ARM-r$R_REV"
-            docker manifest inspect "$repo:$ARM" | python3 -c 'import json, sys
+            echo "$repo:$name"
+            echo "$repo:$name-$DATE"
+            echo "$repo:$name-r$R_REV"
+            docker manifest inspect "$repo:$name" | python3 -c 'import json, sys
           m = json.load(sys.stdin)
           print("download size: %.1f GB" % (sum(l["size"] for l in m.get("layers", [])) / 1e9))' || true
             echo '```'
           } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Delete images older than KEEP_DAYS. The image an arm's own tag points at
+  # is always kept, however old it is.
+  prune:
+    needs: [pin, image]
+    if: always() && needs.pin.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: delete old images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: eval/prune.sh "$KEEP_DAYS"
+
+  # The daily run goes on to compare the new images with CRAN's results.
+  evaluate:
+    needs: [pin, image]
+    if: always() && needs.pin.result == 'success' && (github.event_name == 'schedule' || inputs.evaluate)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: start the evaluate workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          . eval/run.env
+          # Only the results on Debian testing go into README.md.
+          readme=false; [ "$SUITE" != testing ] || readme=true
+          gh workflow run evaluate.yml --ref "$GITHUB_REF_NAME" \
+            -f kinds="$DAILY_KINDS" -f images=published -f suite="$SUITE" -f readme="$readme"

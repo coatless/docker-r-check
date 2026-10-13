@@ -279,12 +279,13 @@ def main(oracle, results, earlier=None, rows=None):
     labels.sort(key=lambda d: d != "reference")
     out = ["# Evaluation run\n"]
     run = dcf(os.path.join(oracle, "run.txt"))
-    for k in ["R-revision", "QA-revision", "CRAN-snapshot", "check_issues-Last-Modified", "Baseline-run"]:
+    for k in ["R-revision", "QA-revision", "Suite", "Images", "Images-differ", "CRAN-snapshot",
+              "check_issues-Last-Modified", "Baseline-run"]:
         if k in run:
             out.append(f"- {k}: {run[k]}")
     built = [f"{d} {'NO' if os.path.exists(os.path.join(results, d, 'BUILD-FAILED')) else 'yes'}"
              for d in labels]
-    out.append("- arms built: " + ", ".join(built))
+    out.append("- arms pulled or built: " + ", ".join(built))
     out.append("")
 
     targets = list(csv.DictReader(open(os.path.join(oracle, "targets.tsv")), delimiter="\t"))

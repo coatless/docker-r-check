@@ -8,7 +8,7 @@ on:
     inputs:
       debian_tag:
         description: Debian suite for the base image
-        default: trixie
+        default: testing
       target:
         description: Dockerfile target to build
         default: base
@@ -17,15 +17,17 @@ permissions:
   contents: read
 
 jobs:
-  # Quick tests of the BLAS scripts in a plain Debian container.
+  # Quick tests of the BLAS scripts in a plain Debian container, on both
+  # Debian suites the arms build on.
   wiring:
     runs-on: ubuntu-24.04
-    container: debian:trixie-slim
+    container: debian:${{ matrix.debian }}-slim
     strategy:
       fail-fast: false
       matrix:
-        # One container per suite, so neither test sees packages the other
-        # installed.
+        debian: [testing, stable]
+        # One container per test script, so neither test sees packages the
+        # other installed.
         suite: [blas-wiring-test.sh, flavour-test.sh, lto-assert-test.sh]
     steps:
       - name: tools
@@ -36,7 +38,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: lint
-        if: matrix.suite == 'blas-wiring-test.sh'
+        if: matrix.suite == 'blas-wiring-test.sh' && matrix.debian == 'testing'
         run: |
           sh tests/lint-flavours.sh
           shellcheck -S warning docker/blas-wiring.sh docker/flavour-setup.sh docker/assert-r-lto.sh
@@ -85,7 +87,7 @@ jobs:
       - name: build
         id: build
         env:
-          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TAG: ${{ github.event.inputs.debian_tag || 'testing' }}
           TARGET: ${{ github.event.inputs.target || 'base' }}
         run: |
           set -o pipefail
@@ -100,7 +102,7 @@ jobs:
       - name: measure
         if: always()
         env:
-          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TAG: ${{ github.event.inputs.debian_tag || 'testing' }}
           TARGET: ${{ github.event.inputs.target || 'base' }}
         run: |
           {
@@ -114,7 +116,7 @@ jobs:
       - name: contents of base
         if: steps.build.outputs.built == '1'
         env:
-          TAG: ${{ github.event.inputs.debian_tag || 'trixie' }}
+          TAG: ${{ github.event.inputs.debian_tag || 'testing' }}
           TARGET: ${{ github.event.inputs.target || 'base' }}
         run: |
           img="rcc-$TARGET:$TAG"
@@ -138,15 +140,24 @@ jobs:
               "dpkg-query -Wf '\${Installed-Size}\t\${Package}\n' | grep -E 'texlive|context' | awk '{s+=\$1; n++} END {printf \"%d packages, %.2f GiB\\n\", n, s/1048576}'"
           } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
-  # Build each arm with R inside and report the BLAS and LAPACK R loads.
+  # Build each arm with R inside, on Debian testing and on stable, and report
+  # the BLAS and LAPACK R loads.
   standalone:
     # The arm64 arm builds on an arm64 runner, the others on x86.
     runs-on: ${{ matrix.flavour == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 240
     strategy:
       fail-fast: false
+      # GitHub gives up on a job that has not got a runner after 15 minutes,
+      # so do not ask for more runners at once than it hands out.
+      max-parallel: 10
       matrix:
-        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, forky, nold, lto, gccsan, clangsan, valgrind, arm64]
+        debian: [testing, stable]
+        flavour: [reference, openblas, atlas, mkl, blis, blisfedora, clang23, nold, lto, gccsan, clangsan, valgrind, arm64]
+        exclude:
+          # Its Fedora binary needs the glibc of testing.
+          - debian: stable
+            flavour: blisfedora
     steps:
       - uses: actions/checkout@v5
 
@@ -171,21 +182,20 @@ jobs:
         id: build
         env:
           FLAVOUR: ${{ matrix.flavour }}
+          SUITE: ${{ matrix.debian }}
         run: |
           set -o pipefail
           cd docker
-          # shellcheck disable=SC1090 # the arm file names its Debian suite
-          suite=$(. "flavours/$FLAVOUR.env" && echo "$RCC_DEBIAN_TAG")
-          # shellcheck disable=SC1090
+          # shellcheck disable=SC1090 # the arm file names its architecture
           arch=$(. "flavours/$FLAVOUR.env" && echo "$RCC_ARCH")
           # The base refuses to build for anything but amd64 unless told to.
           docker build \
             --progress=plain \
             --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
-            --build-arg DEBIAN_TAG="$suite" \
+            --build-arg DEBIAN_TAG="$SUITE" \
             --build-arg RCC_FLAVOUR="$FLAVOUR" \
-            --build-arg R_SVN_REV=90410 \
-            --build-arg QA_SVN_REV=6927 \
+            --build-arg R_SVN_REV=90668 \
+            --build-arg QA_SVN_REV=6971 \
             --build-arg MAKEFLAGS=-j4 \
             --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --target standalone \
@@ -199,7 +209,7 @@ jobs:
         run: |
           img="rcc-standalone:$FLAVOUR"
           {
-            echo "## $FLAVOUR"
+            echo "## $FLAVOUR on Debian ${{ matrix.debian }}"
             echo '```'
             docker run --rm --entrypoint sh "$img" -c 'cat /etc/rcheck/manifest.txt'
             echo '```'
@@ -264,7 +274,7 @@ jobs:
           # rc=1 means the package was not clean, which is not a fault in the
           # image. The step passes when a check ran to a Status line.
           {
-            echo "### R CMD check ($FLAVOUR) -- exit $rc"
+            echo "### R CMD check ($FLAVOUR, ${{ matrix.debian }}) -- exit $rc"
             echo '```'
             grep -E '^\*|^Status' check.log | head -60
             echo '```'

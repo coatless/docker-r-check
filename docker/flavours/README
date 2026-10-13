@@ -1,6 +1,6 @@
 One file per arm, sourced by docker/flavour-setup.sh inside the image.
 
-  RCC_DEBIAN_TAG    Debian suite the arm was written for
+  RCC_SUITES        Debian suites the arm builds on, "testing stable" or one of them
   RCC_ARCH          restrict to one architecture, empty = any
   RCC_SYSDEPS       apt packages
   RCC_SYSDEB_URLS   .deb files fetched by URL (for packages no longer in the suite)
@@ -14,6 +14,12 @@ One file per arm, sourced by docker/flavour-setup.sh inside the image.
   RCC_SETUP_SCRIPT  script in this directory, run after the packages are installed
   RCC_CHECK_ENV     NAME=value settings exported while checking, '|' between them
   RCC_DESC          one-line description, written to /etc/rcheck/flavour.txt
+
+flavour-setup.sh sets RCC_SUITE to testing or stable, whichever the image is
+built on, and RCC_CODENAME to the release's name, before it reads the file.
+An arm whose packages differ between the two tests RCC_SUITE, as blis.env
+does. The workflows and the demo scripts also read the file outside an image,
+where neither is set, so give both a default.
 
 An arm can also export variables that Rconf reads from the environment, as
 clang23.env does with CXX_STDLIB.

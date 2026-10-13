@@ -19,7 +19,9 @@ A="${RCC_ASSERT_LTO:-$ROOT/docker/assert-r-lto.sh}"
 CC="${CC:-gcc}"
 if ! command -v "$CC" >/dev/null 2>&1; then
     apt-get update -qq 2>/dev/null
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gcc >/dev/null 2>&1
+    # libc6-dev is named because gcc only recommends it, and the link step
+    # needs its crti.o.
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gcc libc6-dev >/dev/null 2>&1
 fi
 command -v "$CC" >/dev/null 2>&1 || { echo "FATAL: no C compiler" >&2; exit 2; }
 

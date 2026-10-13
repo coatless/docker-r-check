@@ -3,7 +3,9 @@
 #
 #   flavour-setup.sh <flavour> [flavours-dir]
 #
-# Reads flavours/<flavour>.env (see flavours/README) and, in this order:
+# Works out whether this is Debian stable or testing, reads
+# flavours/<flavour>.env (see flavours/README), stops if the arm does not
+# build on this suite and then, in this order:
 #   1. writes the apt source, signing key and preferences the arm needs
 #   2. installs RCC_SYSDEPS from apt, and removes RCC_APT_REMOVE if installed
 #   3. fetches RCC_SYSDEB_URLS, checks them against RCC_SYSDEB_SHA256, dpkg -i
@@ -25,9 +27,19 @@ WIRING="${RCC_WIRING:-$HERE/blas-wiring.sh}"
 ENVFILE="$FLAVOURS_DIR/$FLAVOUR.env"
 [ -r "$ENVFILE" ] || { echo "flavour-setup.sh: no such flavour: $ENVFILE" >&2; exit 2; }
 
+# Debian stable has a release number in /etc/debian_version. Testing and
+# unstable have a name such as forky/sid. An arm file can read both values.
+case "$(cat /etc/debian_version 2>/dev/null)" in
+*/sid) RCC_SUITE=testing ;;
+*)     RCC_SUITE=stable ;;
+esac
+RCC_CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+export RCC_SUITE RCC_CODENAME
+
 # shellcheck disable=SC1090
 . "$ENVFILE"
 
+: "${RCC_SUITES:=testing stable}"
 : "${RCC_ARCH:=}" "${RCC_SYSDEPS:=}" "${RCC_SYSDEB_URLS:=}" "${RCC_SYSDEB_SHA256:=}"
 : "${RCC_APT_PIN:=}" "${RCC_APT_HOLD:=}" "${RCC_APT_REMOVE:=}" "${RCC_DESC:=}"
 : "${RCC_APT_SOURCE:=}" "${RCC_APT_KEY:=}" "${RCC_CHECK_ENV:=}" "${RCC_SETUP_SCRIPT:=}"
@@ -37,6 +49,14 @@ HOST_ARCH="$(dpkg --print-architecture)"
 
 echo "flavour-setup.sh: $FLAVOUR -- $RCC_DESC"
 echo "  arch: $HOST_ARCH"
+echo "  suite: $RCC_SUITE ($RCC_CODENAME)"
+
+case " $RCC_SUITES " in
+*" $RCC_SUITE "*) ;;
+*)
+    echo "flavour-setup.sh: $FLAVOUR builds on Debian $RCC_SUITES only, and this is $RCC_SUITE." >&2
+    exit 1 ;;
+esac
 
 if [ -n "$RCC_ARCH" ] && [ "$RCC_ARCH" != "$HOST_ARCH" ]; then
     echo "flavour-setup.sh: $FLAVOUR is $RCC_ARCH-only, this is $HOST_ARCH." >&2
@@ -140,6 +160,7 @@ fi
     echo "flavour: $FLAVOUR"
     echo "desc: $RCC_DESC"
     echo "arch: $HOST_ARCH"
+    echo "suite: $RCC_SUITE"
     echo "rconf_flags: ${RCC_RCONF_FLAGS:-}"
     echo "apt_source: $(printf '%s' "$RCC_APT_SOURCE" | sed -n 's/.*URIs: \([^|]*\).*/\1/p')"
     echo "sysdeps: $RCC_SYSDEPS"

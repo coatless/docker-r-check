@@ -6,11 +6,14 @@
 # Each arm is tagged rcc-standalone:<flavour>.  The base layers (Debian,
 # rcheckserver, R and QA sources) are shared, so the first arm is slow and
 # the rest mostly cost an R build each.
+#
+# The arms build on Debian testing. RCC_SUITE=stable builds them on Debian
+# stable, under the same names.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 [ $# -ge 1 ] || die "usage: $0 <flavour>...   (flavours: $(flavours | tr '\n' ' '))"
-for fl in "$@"; do have_flavour "$fl" || die "no such flavour '$fl'"; done
+for fl in "$@"; do have_flavour "$fl" || die "no such flavour '$fl'"; need_suite "$fl"; done
 
 progress=()
 [ "$ENGINE" = docker ] && progress=(--progress=plain)
@@ -25,11 +28,11 @@ for fl in "$@"; do
     PLATFORM="$(platform_of "$fl")"
     # The base refuses to build for anything but amd64 unless told to.
     allow=""; [ "$PLATFORM" = linux/amd64 ] || allow=1
-    echo "== $(image "$fl")  [$PLATFORM, R r$R_SVN_REV, QA r$QA_SVN_REV]"
+    echo "== $(image "$fl")  [$PLATFORM, Debian $SUITE, R r$R_SVN_REV, QA r$QA_SVN_REV]"
     echo "   log: $log"
     start=$SECONDS
     if ! "$ENGINE" build --platform "$PLATFORM" ${progress[@]+"${progress[@]}"} \
-            --build-arg DEBIAN_TAG="$(suite_of "$fl")" \
+            --build-arg DEBIAN_TAG="$SUITE" \
             --build-arg ALLOW_NON_AMD64="$allow" \
             --build-arg RCC_FLAVOUR="$fl" \
             --build-arg R_SVN_REV="$R_SVN_REV" \

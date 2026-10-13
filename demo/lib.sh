@@ -5,6 +5,8 @@
 # Everything here can be overridden from the environment:
 #
 #   RCC_ENGINE     docker (default) or podman
+#   RCC_SUITE      the Debian suite to build on or to pull, testing (default)
+#                  or stable
 #   RCC_PLATFORM   the platform to build and run for. By default it is the
 #                  arm's own, linux/amd64 for every arm but arm64. On a host
 #                  of the other kind this turns on emulation.
@@ -16,9 +18,10 @@
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENGINE="${RCC_ENGINE:-docker}"
+SUITE="${RCC_SUITE:-testing}"
 PLATFORM="${RCC_PLATFORM:-linux/amd64}"
-R_SVN_REV="${R_SVN_REV:-90410}"
-QA_SVN_REV="${QA_SVN_REV:-6927}"
+R_SVN_REV="${R_SVN_REV:-90668}"
+QA_SVN_REV="${QA_SVN_REV:-6971}"
 CRAN="${CRAN_MIRROR:-https://cloud.r-project.org}"
 RESULTS="${RCC_RESULTS:-$ROOT/results}"
 
@@ -34,10 +37,19 @@ platform_of() {
     echo "${RCC_PLATFORM:-linux/$a}"
 }
 
-# suite_of <flavour> prints the Debian release an arm is built on.
-suite_of() {
+# suites_of <flavour> prints the Debian suites an arm builds on.
+suites_of() {
     # shellcheck disable=SC1090 # the arm's settings
-    (. "$ROOT/docker/flavours/$1.env" && echo "${RCC_DEBIAN_TAG:-trixie}")
+    (. "$ROOT/docker/flavours/$1.env" && echo "${RCC_SUITES:-testing stable}")
+}
+
+# need_suite <flavour> stops unless the arm builds on the chosen suite.
+need_suite() {
+    case "$SUITE" in testing|stable) ;; *) die "RCC_SUITE is '$SUITE', and it must be testing or stable" ;; esac
+    case " $(suites_of "$1") " in
+    *" $SUITE "*) ;;
+    *) die "$1 builds on Debian $(suites_of "$1") only, and RCC_SUITE is $SUITE" ;;
+    esac
 }
 
 flavours() { ls "$ROOT/docker/flavours" | sed -n 's/\.env$//p'; }

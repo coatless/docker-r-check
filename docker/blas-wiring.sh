@@ -26,7 +26,7 @@ L="/usr/lib/$MA"
 # Print one "<alternatives-group>|<target>" line per group the arm sets.
 flavour_spec() {
     case "$1" in
-    reference|forky|nold|lto|gccsan|valgrind|arm64)
+    reference|nold|lto|gccsan|valgrind|arm64)
         printf '%s\n' \
             "libblas.so.3-$MA|$L/blas/libblas.so.3" \
             "liblapack.so.3-$MA|$L/lapack/liblapack.so.3"
@@ -88,7 +88,7 @@ expected_fragment() {
     case "$1" in
     # -bi builds R with its own BLAS at $R_HOME/lib/libRblas.so, so that is
     # what R reports, whatever the Debian alternatives say.
-    reference|forky|nold|lto|gccsan|valgrind|arm64) echo "libRblas.so" ;;
+    reference|nold|lto|gccsan|valgrind|arm64) echo "libRblas.so" ;;
     openblas)  echo "/openblas-serial/" ;;
     atlas)     echo "/atlas/" ;;
     blis)      echo "/blis-serial/" ;;
@@ -154,7 +154,8 @@ do_show() {
     for g in "libblas.so.3-$MA" "liblapack.so.3-$MA" "libopenblas.so.0-$MA"; do
         v="$(update-alternatives --query "$g" 2>/dev/null | awk '/^Value:/{print $2}')"
         printf '  %-34s %s\n' "$g" "${v:-<not registered>}"
-        [ -n "${v:-}" ] && printf '  %-34s   -> %s\n' "" "$(resolve "$v")"
+        # An if, so that a group nothing provides does not make show fail.
+        if [ -n "${v:-}" ]; then printf '  %-34s   -> %s\n' "" "$(resolve "$v")"; fi
     done
 }
 

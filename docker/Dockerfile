@@ -1,8 +1,11 @@
 ## specify the favor of Debian to create the image from. Can be set on CLI, example:
 ##
-##   docker build --build-arg DEBIAN_TAG=testing --target base -t rchk-base:testing .
+##   docker build --build-arg DEBIAN_TAG=stable --target base -t rchk-base:stable .
+##
+## The default is testing, which is what CRAN's check machines run and what
+## rcheckserver is kept up to date for. The arms build on testing and stable.
 
-ARG DEBIAN_TAG=unstable
+ARG DEBIAN_TAG=testing
 
 ## Target: base - base image with rcheckserver
 FROM docker.io/debian:${DEBIAN_TAG} AS base
@@ -110,7 +113,7 @@ ENTRYPOINT [ "/bin/bash", "/entry-pkgcheck.sh" ]
 ## layout, so entry-pkgcheck.sh works unchanged and nothing needs mounting.
 ##
 ##   docker build --target standalone \
-##     --build-arg RCC_FLAVOUR=openblas --build-arg R_SVN_REV=90393 .
+##     --build-arg RCC_FLAVOUR=openblas --build-arg R_SVN_REV=90668 .
 FROM pkgcheck AS standalone
 
 ARG RCC_FLAVOUR=reference
@@ -149,6 +152,9 @@ RUN set -eu; \
       echo "r_svn_rev: $(cat /etc/rcheck-r-svn-rev 2>/dev/null || echo unknown)"; \
       echo "qa_svn_rev: $(cat /etc/rcheck-qa-svn-rev 2>/dev/null || echo unknown)"; \
       echo "debian: $(. /etc/os-release; echo "$VERSION_CODENAME")"; \
+      echo "suite: $(case "$(cat /etc/debian_version)" in */sid) echo testing ;; *) echo stable ;; esac)"; \
+      echo "rcheckserver: $(dpkg-query -W -f='${Version}' rcheckserver 2>/dev/null || echo removed)"; \
+      echo "gcc: $(gcc -dumpfullversion)"; \
       echo "arch: $(dpkg --print-architecture)"; \
       echo "glibc: $(ldd --version | head -n1)"; \
       cat /etc/rcheck/r-blas.txt 2>/dev/null || true; \

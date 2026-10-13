@@ -145,9 +145,11 @@ def section(entries, silent, run, old, old_date, url):
     # Wrapped like the rest of README.md. A link is never split.
     para = lambda s: textwrap.fill(s, 78, break_long_words=False, break_on_hyphens=False)
     out = [START,
-           para(f"The evaluate workflow repeats this comparison for CRAN's {listed(kinds, code=False)} "
-                f"{'list' if len(kinds) == 1 else 'lists'} and rewrites this section. It is set to run every day. "
-                f"The {the_run} used R-devel r{run.get('R-revision', '?')}, "
+           para(f"Every day the publish workflow rebuilds the arms, and the evaluate workflow repeats this "
+                f"comparison in the new images for CRAN's {listed(kinds, code=False)} "
+                f"{'list' if len(kinds) == 1 else 'lists'} and rewrites this section. "
+                f"The {the_run} used R-devel r{run.get('R-revision', '?')}"
+                f"{' on Debian ' + run['Suite'] if run.get('Suite') else ''}, "
                 f"the CRAN snapshot of {run.get('CRAN-snapshot', '?')} and CRAN's lists as of {as_of}."),
            "",
            "| CRAN's list | Package | CRAN's result | Result here |",
@@ -171,6 +173,11 @@ def section(entries, silent, run, old, old_date, url):
         out += [para("A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3` is "
                      "Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's binary "
                      "with the haswell kernels."), ""]
+    # An arm whose build failed that day is checked in its image from before.
+    other = re.findall(r"(\S+) \(r(\d+), built ([^)]*)\)", run.get("Images-differ", ""))
+    if other:
+        out += [para("Not every image is from that build. " +
+                     listed([f"`{a}` has R-devel r{r}, built on {b}" for a, r, b in other], code=False) + "."), ""]
     if silent:
         out += [para(f"No results came from {listed(silent)} this time."), ""]
     if old_date:
