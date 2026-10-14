@@ -66,7 +66,7 @@ There are thirteen arms. Each one changes a single thing against `reference`.
 | Arm | What it changes | Passed to `Rconf` |
 |---|---|---|
 | `reference` | Nothing. R's own BLAS and LAPACK, Debian's GCC. | `-bi` |
-| `openblas` | Serial OpenBLAS, with its LAPACK | `-bo` |
+| `openblas` | Serial OpenBLAS 0.3.29, with its LAPACK | `-bo` |
 | `atlas` | ATLAS 3.10.3, with its LAPACK 3.11.0 | `--with-blas=-lblas --with-lapack=-llapack` |
 | `mkl` | Serial Intel MKL 2026.1, BLAS and LAPACK | `-bm` |
 | `blis` | Serial BLIS 2.1, with Debian's LAPACK 3.12.1 | `--with-blas=-lblas --with-lapack=-llapack` |
@@ -110,11 +110,16 @@ checks, except in its OpenBLAS.
 | BLIS | 2.1 | 1.1 | 2.0 |
 | valgrind | 3.27 | 3.24 | 3.27 |
 
+The `openblas` arm uses OpenBLAS 0.3.29 on both suites, the version CRAN
+uses. On testing it installs stable's packages. With the Haswell kernels the
+comparison pins, 0.3.34 crashed `irlba`, `netrics` and `rpanel` on one of
+GitHub's newer AMD runners, and in a test on another it crashed where 0.3.29
+did not.
+
 On 2026-10-13 the comparison described below ran once on each suite, with
 the same R-devel revision and the same lists. Every entry of CRAN's lists had
 the same result on both but `BFS`, whose tests ask a web service that
-answered HTTP 429 in one arm of each run. That includes the two OpenBLAS
-entries that reproduce, so the newer OpenBLAS has made no difference so far.
+answered HTTP 429 in one arm of each run.
 
 Every arm but `blisfedora` also builds on Debian stable. `RCC_SUITE=stable`
 selects it for `01-build.sh` and `01-pull.sh`, and `--build-arg
@@ -186,7 +191,9 @@ flowchart TD
 
 A result is reproduced when the arm shows exactly the problems in CRAN's log,
 partly reproduced when it shows some of them, and not reproduced when the
-arm's check is clean. "Also in reference" means the control shows the same
+arm's check is clean. Where both logs name the tests that failed, at least
+one has to be the same. Otherwise, such as a crash here where CRAN's test
+could not reach a web page, the result is "same step, different result". "Also in reference" means the control shows the same
 problem, so the arm's own change is not what causes it. An entry that failed
 at CRAN on a web request shows as not reproduced when the request works here.
 

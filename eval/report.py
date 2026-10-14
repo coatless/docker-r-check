@@ -24,6 +24,9 @@ QUOTED = re.compile(r"\s*[‘'][^’']*[’']")
 MISSING = re.compile(r"Packages? (?:required|suggested) but not available:?((?:\s*[‘'][^’']+[’'],?)+)")
 COMPARING = re.compile(r"^\s*Comparing [‘']([^’']+)[’'] to [‘'][^’']+[’'] \.\.\.(.*)$")
 FAILED = re.compile(r"^Running the tests in [‘']tests/([^’']+)[’'] failed")
+# What a failed test run names: where testthat found each failed test, or the
+# signal R caught.
+TEST_FAILURE = re.compile(r"(?:──|--) (?:Error|Failure|Warning)[^(]*\('([^']+)'\)|\*\*\* caught (.+?) \*\*\*")
 # A link-time warning about one symbol, as GCC prints it.
 LTO = re.compile(r"warning: (?:type of |type )?[‘']([^’']+)[’'] "
                  r"(?:does not match original declaration|violates the C\+\+ One Definition Rule) "
@@ -80,6 +83,27 @@ def problems(path):
         names = sorted({n for m in MISSING.finditer(text) for n in re.findall(r"[‘']([^’']+)[’']", m.group(1))})
         if names:
             found["package dependencies"] += " (needs " + ", ".join(names) + ")"
+    return found
+
+
+def test_failures(path):
+    """The failed tests and crashes a check log names in its tests step.
+
+    Two logs can fail the same test file for different reasons, such as a
+    web request in one and a segfault in the other, and this tells them apart.
+    """
+    try:
+        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return set()
+    found, in_tests = set(), False
+    for line in lines:
+        if line.startswith("* "):
+            in_tests = line.startswith("* checking tests")
+            continue
+        m = TEST_FAILURE.search(line) if in_tests else None
+        if m:
+            found.add(m.group(1) or "caught " + m.group(2))
     return found
 
 
@@ -198,7 +222,8 @@ def ours(results, label, pkg, kind=None):
     if not os.path.isdir(d):
         return None
     m = dcf(os.path.join(d, "manifest.dcf"))
-    found = problems(os.path.join(d, pkg + ".Rcheck", "00check.log"))
+    log = os.path.join(d, pkg + ".Rcheck", "00check.log")
+    found = problems(log)
     then_failed = False
     if kind == "LTO":
         # The LTO warnings are in the install log, and they count even when
@@ -219,6 +244,7 @@ def ours(results, label, pkg, kind=None):
         "problems": found or {},
         "tarball": m.get("Tarball", ""),
         "then_failed": then_failed,
+        "tests": test_failures(log),
     }
 
 
@@ -230,7 +256,7 @@ def short(p, most=None):
     return "; ".join(items) if items else "OK"
 
 
-def verdict(cran, arm, ref):
+def verdict(cran, arm, ref, cran_tests=frozenset()):
     if arm is None:
         return "not checked"
     if arm["status"] == "did not complete":
@@ -238,7 +264,7 @@ def verdict(cran, arm, ref):
     c, a = set(cran), set(arm["problems"])
     if not a:
         v = "not reproduced"
-    elif arm["problems"] == cran:
+    elif arm["problems"] == cran and not (cran_tests and arm["tests"] and not cran_tests & arm["tests"]):
         v = "reproduced"
     elif a == c:
         v = "same step, different result"
@@ -304,11 +330,12 @@ def main(oracle, results, earlier=None, rows=None):
         if sign:
             cran = signatures(os.path.join(oracle, t["log"][:-4] + ".d"), sign) or cran
         ref = None if lto or sign or other else ours(results, "reference", pkg)
+        cran_tests = set() if lto or sign or other else test_failures(os.path.join(oracle, t["log"]))
         most = 3 if lto or sign or other else None
         variants = [d for d in labels if d == arm or d.startswith(arm + "-")] or [arm]
         for label in variants:
             a = ours(results, label, pkg, t["kind"])
-            v = verdict(cran, a, ref)
+            v = verdict(cran, a, ref, cran_tests)
             if a and a["then_failed"]:
                 v += ", but the install failed afterwards"
             tally.setdefault(label, {}).setdefault(re.split(", (?:all|part) of it", v)[0], []).append(pkg)

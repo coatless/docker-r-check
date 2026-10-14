@@ -54,6 +54,13 @@ if $S openblas "$D" >/tmp/o2 2>&1; then ok "setup exited 0"; else no "setup fail
 r=$(readlink -f /usr/lib/x86_64-linux-gnu/libopenblas.so.0)
 case "$r" in *openblas-serial*) ok "libopenblas.so.0 -> serial (this is what -bo binds)";; *) no "-> $r";; esac
 grep -q 'flavour: openblas' /etc/rcheck/flavour.txt && ok "manifest written" || no "no manifest"
+# CRAN's version on both suites. Testing has a newer one, so there the arm
+# fetches stable's and holds it.
+v=$(dpkg-query -W -f='${Version}' libopenblas0-serial 2>/dev/null)
+case "$v" in 0.3.29*) ok "serial OpenBLAS is $v";; *) no "serial OpenBLAS is '$v', not 0.3.29";; esac
+if [ "$SUITE" = testing ]; then
+    apt-mark showhold | grep -qx libopenblas0-serial && ok "held on testing" || no "not held on testing"
+fi
 
 if builds_here atlas; then
 say "F3 atlas (fetch by URL + checksum + pin + hold)"
