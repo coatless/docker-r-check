@@ -137,12 +137,15 @@ suite, and `demo/02-inspect.sh` prints it.
 
 ## The daily build
 
-Every day the [publish workflow](.github/workflows/publish.yml) builds each
-arm from scratch and pushes it to [GitHub's container registry][ghcr]. A
-build starts from Debian's testing image, installs `rcheckserver`, checks out
-the newest R-devel and QA revisions and builds R. Nothing is reused from the
-day before, so a new `rcheckserver` or a changed Debian package is in the
-next day's images.
+Every day the [publish workflow](.github/workflows/publish.yml) builds the
+arms from scratch and pushes them to [GitHub's container registry][ghcr]. It
+first builds one base image from Debian's testing image and `rcheckserver`.
+Each arm for x86 is then built on that image. It adds the arm's BLAS or
+compilers, checks out the newest R-devel and QA revisions and builds R. So
+the x86 arms of a day start from the same Debian packages, and in the
+registry they share the base's layers. The `arm64` arm builds its own base,
+for its own architecture. Nothing is reused from the day before, so a new
+`rcheckserver` or a changed Debian package is in the next day's images.
 
 An image is pushed only after R has built and reports the arm's BLAS. On a
 day when an arm does not build, its image from the day before stays in place.
@@ -158,7 +161,9 @@ The workflow deletes images that are more than 30 days old. The repository
 variable `RCC_KEEP_DAYS` changes that to 60, 90 or `never`. The image an
 arm's own tag points at is kept however old it is. Started by hand, the
 workflow can also build on Debian stable, and those tags read
-`openblas-stable`, `openblas-stable-2026-10-14` and so on.
+`openblas-stable`, `openblas-stable-2026-10-14` and so on. The base image is
+tagged `base` and `base-2026-10-14`, or `base-stable` and
+`base-stable-2026-10-14`.
 
 Once the images are pushed, the workflow starts the comparison described in
 the next section, on those images.
@@ -321,7 +326,9 @@ arms.
 | `03-check.sh <arm> <pkg>...` | Checks CRAN packages or local tarballs through the image's entrypoint. Writes the `.Rcheck` directory and a `manifest.dcf` to `results/<arm>/<pkg>/`. |
 | `04-compare.sh "<arms>" <pkg>...` | Runs `03-check.sh` in each arm from one dated snapshot, then diffs every `00check.log` against the first arm's. |
 
-`01-pull.sh` pulls the [published images][images], about 9 GB each. To build
+`01-pull.sh` pulls the [published images][images]. The first is about
+10.5 GB. The x86 arms of one day share their base, so each further arm of
+that day adds well under 1 GB. To build
 an arm yourself, run `01-build.sh` in its place. It builds R-devel r90668
 unless `R_SVN_REV` and `QA_SVN_REV` name other revisions, such as the ones in
 a published image's manifest. A build also needs BuildKit and 8 GB of engine
@@ -596,9 +603,9 @@ and runs `R CMD check` on `digest` and `jsonlite` in it. That last step only con
 `Status:` line. The [evaluate workflow](.github/workflows/evaluate.yml) is
 the comparison with CRAN described above, and it checks packages through the
 images' entrypoint. The [publish workflow](.github/workflows/publish.yml)
-is the daily build. It builds the arms from one R-devel revision, pushes
-them to [GitHub's container registry][ghcr] and starts the evaluate workflow
-on them. All three add swap
+is the daily build. It builds the base once, builds the arms on it from one
+R-devel revision, pushes them to [GitHub's container registry][ghcr] and
+starts the evaluate workflow on them. All three add swap
 on the runner before a build, because exporting a finished image takes about
 15 GB of memory and a GitHub runner has 16.
 

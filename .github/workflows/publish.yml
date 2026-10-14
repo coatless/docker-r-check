@@ -4,13 +4,19 @@ name: publish
 # ghcr.io/<owner>/<repository>:<arm>. Each image is also tagged
 # <arm>-<date> and <arm>-r<R revision>, so that one build can be named later.
 #
+# The Dockerfile's base, Debian with rcheckserver, is built once and pushed
+# as base and base-<date>. The arms for x86 are built on that image, so they
+# have the same Debian packages and share its layers in the registry. The
+# arm64 arm builds its own base, for its own architecture.
+#
 # A run starts every day and builds on Debian testing, with the newest
 # R-devel and QA revisions. It then starts the evaluate workflow on the new
 # images and deletes images that are older than KEEP_DAYS.
 #
 # A run started by hand, from the Actions page or with
 # `gh workflow run publish.yml`, can build on Debian stable. Those images are
-# tagged <arm>-stable, <arm>-stable-<date> and <arm>-stable-r<R revision>.
+# tagged <arm>-stable, <arm>-stable-<date> and <arm>-stable-r<R revision>,
+# and the base base-stable and base-stable-<date>.
 
 on:
   # GitHub starts a scheduled run from the default branch only, and often
@@ -63,6 +69,7 @@ jobs:
       qa_rev: ${{ steps.pin.outputs.qa_rev }}
       date: ${{ steps.pin.outputs.date }}
       arms: ${{ steps.arms.outputs.arms }}
+      base: ${{ steps.arms.outputs.base }}
     steps:
       - uses: actions/checkout@v5
 
@@ -87,21 +94,109 @@ jobs:
         env:
           IN_ARMS: ${{ inputs.arms }}
         run: |
-          # Every arm that builds on this suite, or the ones asked for.
+          # Every arm that builds on this suite, or the ones asked for. The
+          # base is built when one of them is for x86.
           arms=""
+          base=false
           for f in docker/flavours/*.env; do
             arm=$(basename "$f" .env)
             # shellcheck disable=SC1090 # the arm file names its suites
             suites=$(. "$f" && echo "${RCC_SUITES:-testing stable}")
             case " $suites " in *" $SUITE "*) ;; *) echo "$arm does not build on $SUITE"; continue ;; esac
-            case " ${IN_ARMS//[^a-z0-9]/ } " in "  "|*" $arm "*) arms="$arms $arm" ;; esac
+            case " ${IN_ARMS//[^a-z0-9]/ } " in "  "|*" $arm "*) ;; *) continue ;; esac
+            arms="$arms $arm"
+            # shellcheck disable=SC1090
+            [ "$(. "$f" && echo "$RCC_ARCH")" != amd64 ] || base=true
           done
           [ -n "$arms" ] || { echo "no arm to build"; exit 1; }
           # shellcheck disable=SC2086 # the list is split on purpose
           echo "arms=$(printf '%s\n' $arms | jq -R . | jq -cs .)" | tee -a "$GITHUB_OUTPUT"
+          echo "base=$base" | tee -a "$GITHUB_OUTPUT"
+
+  # The base for the arms on x86, pushed once. The arms build on it by its
+  # digest, so they all get this image even if the tag moves.
+  base:
+    needs: pin
+    if: needs.pin.outputs.base == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+    env:
+      DATE: ${{ needs.pin.outputs.date }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: reclaim disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: add swap
+        run: |
+          # Exporting the base takes most of a runner's memory too.
+          sudo fallocate -l 16G /rcc-swap
+          sudo chmod 600 /rcc-swap
+          sudo mkswap /rcc-swap > /dev/null
+          sudo swapon /rcc-swap
+          free -h
+
+      - name: build the base
+        run: |
+          set -o pipefail
+          # The arms set these labels again, so none of the base's is left
+          # on an arm with a wrong value.
+          docker build --progress=plain --platform linux/amd64 --target base \
+            --build-arg DEBIAN_TAG="$SUITE" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label "org.opencontainers.image.description=Debian $SUITE with rcheckserver, the base of the arms for CRAN's additional checks" \
+            --label "rcheck.suite=$SUITE" --label "rcheck.built=$DATE" \
+            -t rcc-base docker/ 2>&1 | tail -n 300
+          {
+            echo "## base on Debian $SUITE"
+            echo '```'
+            docker run --rm rcc-base dpkg-query -W -f='rcheckserver ${Version}\n' rcheckserver
+            echo "packages: $(docker run --rm rcc-base sh -c "dpkg-query -f '.\n' -W | wc -l")"
+            echo "size on disk: $(docker images rcc-base --format '{{.Size}}')"
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: push
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          name=base; [ "$SUITE" = testing ] || name="base-$SUITE"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for tag in "$name-$DATE" "$name"; do
+            docker tag rcc-base "$repo:$tag"
+            docker push --quiet "$repo:$tag"
+          done
+          image=$(docker image inspect --format '{{index .RepoDigests 0}}' "$repo:$name")
+          case "$image" in "$repo@sha256:"*) ;; *) echo "no digest for $repo:$name: $image"; exit 1 ;; esac
+          echo "image=$image" | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "### pushed"
+            echo '```'
+            echo "$repo:$name"
+            echo "$repo:$name-$DATE"
+            echo "$image"
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
   image:
-    needs: pin
+    needs: [pin, base]
+    # The arm64 arm does not need the base, so it runs when the base did not
+    # build. An arm for x86 then stops in its build step.
+    if: ${{ !cancelled() && needs.pin.result == 'success' }}
     # The arm64 arm builds on an arm64 runner, the others on x86.
     runs-on: ${{ matrix.arm == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 240
@@ -120,6 +215,7 @@ jobs:
       R_REV: ${{ needs.pin.outputs.r_rev }}
       QA_REV: ${{ needs.pin.outputs.qa_rev }}
       DATE: ${{ needs.pin.outputs.date }}
+      BASE: ${{ needs.base.outputs.image }}
     steps:
       - uses: actions/checkout@v5
 
@@ -148,11 +244,22 @@ jobs:
           sleep $((RANDOM % 90))
           # shellcheck disable=SC1090 # the arm file names its architecture
           arch=$(. "docker/flavours/$ARM.env" && echo "$RCC_ARCH")
-          # The base refuses to build for anything but amd64 unless told to.
+          # An arm for x86 takes the Dockerfile's base stage from the image
+          # the base job pushed. The base refuses to build for anything but
+          # amd64 unless told to.
+          base=()
+          if [ "$arch" = amd64 ]; then
+            [ -n "$BASE" ] || { echo "the base image did not build, so this arm is not built"; exit 1; }
+            docker pull --quiet "$BASE"
+            base=(--build-context "base=docker-image://$BASE"
+                  --label "org.opencontainers.image.base.name=$BASE"
+                  --label "org.opencontainers.image.base.digest=${BASE#*@}")
+          fi
           # The source label is what ties the image to this repository, and
           # the evaluate workflow reads the revisions and the suite from the
           # other labels.
           docker build --progress=plain --platform "linux/$arch" --target standalone \
+            "${base[@]}" \
             --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
             --build-arg DEBIAN_TAG="$SUITE" --build-arg RCC_FLAVOUR="$ARM" \
             --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
@@ -166,6 +273,12 @@ jobs:
             --label "rcheck.r-svn-rev=$R_REV" --label "rcheck.qa-svn-rev=$QA_REV" \
             --label "rcheck.built=$DATE" \
             -t "rcc-standalone:$ARM" docker/ 2>&1 | tail -n 300
+          if [ "$arch" = amd64 ]; then
+            # The arm's first layers are the base's, or it was not built on it.
+            docker image inspect --format '{{json .RootFS.Layers}}' "$BASE" "rcc-standalone:$ARM" \
+              | jq -se '.[1][:(.[0] | length)] == .[0]' > /dev/null \
+              || { echo "rcc-standalone:$ARM is not built on $BASE"; exit 1; }
+          fi
 
       - name: what the image holds
         run: |
