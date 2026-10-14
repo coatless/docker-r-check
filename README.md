@@ -393,8 +393,9 @@ to `regular`.
 Output goes to `results/`, which git ignores. The build downloads from
 [Docker Hub][docker-hub], [deb.debian.org][debian-mirror],
 [statmath.wu.ac.at][aasc], [svn.r-project.org][r-svn] and
-[cloud.r-project.org][cran-cloud]. The `mkl`, `clang23` and `blisfedora` arms
-also download from [Intel][mkl], [apt.llvm.org][apt-llvm] and
+[cloud.r-project.org][cran-cloud]. The `mkl` arm also downloads from
+[Intel][mkl], the `clang23` and `clangsan` arms from [apt.llvm.org][apt-llvm]
+and [GDAL's releases on GitHub][gdal-releases], and `blisfedora` from
 [Fedora][fedora-koji]. Checks download from a [CRAN mirror][cran-mirrors] and
 [bioconductor.org][bioc].
 
@@ -542,12 +543,14 @@ CRAN's own arm64 checks use the R release on Ubuntu.
 glibc 2.43, so it builds on Debian testing only. I kept it because it shows
 which of CRAN's BLIS results come from Fedora's build of BLIS.
 
-In the `clang23` arm some packages cannot be checked. Debian builds its C++
-system libraries with libstdc++, so a package that calls one of them from C++
-does not load when it is compiled with libc++. On stable `terra`, `pdftools`
-and `otelsdk` do not install. On testing `sf` and `magick` do not install
-either, and with them every package that needs `sf`. CRAN's machine has
-libc++ builds of those libraries. The `clangsan` arm uses libc++ too.
+In the `clang23` and `clangsan` arms some packages cannot be checked. These
+arms compile C++ with libc++, and Debian builds its C++ system libraries with
+libstdc++, so a package that calls one of them from C++ does not load. The
+arms build [GDAL][gdal] 3.12.4 with libc++ in `/usr/local/clang`, as CRAN's
+clang machine does, so `sf` and `terra` install. `pdftools` and `otelsdk` do
+not, because Poppler and Protocol Buffers are Debian's builds. On testing
+`magick` does not install either. Its install script links a prebuilt
+ImageMagick that needs FTP functions testing's libxml2 no longer has.
 
 The image's entrypoint always exits 0, so `03-check.sh` reads the result from
 `00check.log`.
@@ -650,6 +653,8 @@ The code this fork adds is licensed under GPL (>= 2), as R is.
 - [OpenBLAS][openblas], [BLIS][blis] and [Intel MKL][mkl]
 - [Fedora's `blis` package][fedora-blis], the source of the `blisfedora` binary
 - [apt.llvm.org][apt-llvm], the source of clang 23 and flang 23
+- [GDAL][gdal] and [its releases][gdal-releases], built with libc++ for the
+  clang arms
 - [Docker Desktop settings][docker-settings], for the Rosetta switch
 
 [docker-r-check]: https://github.com/s-u/docker-r-check
@@ -673,6 +678,8 @@ The code this fork adds is licensed under GPL (>= 2), as R is.
 [mkl]: https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html
 [fedora-blis]: https://src.fedoraproject.org/rpms/blis
 [apt-llvm]: https://apt.llvm.org/
+[gdal]: https://gdal.org/
+[gdal-releases]: https://github.com/OSGeo/gdal/releases
 [docker-settings]: https://docs.docker.com/desktop/settings-and-maintenance/settings/
 [docker-hub]: https://hub.docker.com/_/debian
 [debian-mirror]: https://deb.debian.org/
