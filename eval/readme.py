@@ -57,6 +57,27 @@ def listed(names, code=True):
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
+def chip(name):
+    """A CPU's model name without the trademarks, clock and core count."""
+    name = re.sub(r"\((?:R|TM)\)", "", name)
+    name = re.sub(r"\s+(?:CPU\s+)?@.*$|\s+\d+-Core Processor$", "", name.strip())
+    return " ".join(name.split())
+
+
+def ran_on(entries, kind):
+    """Which CPU a list's checks ran on, as "an X" or "an X, except `p` on a Y"."""
+    cpus = {}
+    for (k, pkg), e in entries.items():
+        for cpu in {c for c in e["cpus"].values() if c} if k == kind else ():
+            cpus.setdefault(cpu, []).append(pkg)
+    a = lambda c: ("an " if c[:1] in "AEIOU" else "a ") + c
+    order = sorted(cpus, key=lambda c: (-len(cpus[c]), c))
+    if not order:
+        return ""
+    rest = [f"{listed(sorted(cpus[c], key=str.lower))} on {a(c)}" for c in order[1:]]
+    return a(order[0]) + (", except " + listed(rest, code=False) if rest else "")
+
+
 def collapse(rows):
     """One entry per list and package, and the jobs that gave no result at all.
 
@@ -68,8 +89,9 @@ def collapse(rows):
     entries = {}
     for r in rows:
         e = entries.setdefault((r["kind"], r["package"]),
-                               {"version": r["version"], "cran": r["cran"], "by": {}, "jobs": {}})
+                               {"version": r["version"], "cran": r["cran"], "by": {}, "jobs": {}, "cpus": {}})
         e["jobs"][r["job"]] = r["verdict"]
+        e["cpus"][r["job"]] = chip(r.get("cpu") or "")
         # A job with no results says nothing about a package other jobs checked.
         if r["job"] in silent and len(jobs) > len(silent):
             e.setdefault("silent", r["verdict"])
@@ -169,6 +191,12 @@ def section(entries, silent, run, old, old_date, url):
             out += [f"| {kind} | `{pkg}` {e['version']} | {cell(e['cran'])} | {cell(e['shown'])} |"
                     for pkg, e in mine]
     out.append("")
+    # The OpenBLAS and BLIS kernels are pinned. MKL's code cannot be pinned on
+    # an AMD CPU, so its results follow the runner.
+    mkl = ran_on(entries, "MKL")
+    if mkl:
+        out += [para(f"The MKL checks ran on {mkl}. MKL runs its AVX2 and AVX-512 code only on Intel "
+                     "CPUs, so an MKL result can change with the runner."), ""]
     if any("`blis" in e["shown"] for e in entries.values()):
         out += [para("A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3` is "
                      "Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's BLIS and "

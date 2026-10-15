@@ -10,7 +10,7 @@ such as blis-haswell, each with one directory per package (manifest.dcf,
 as mkl@offline holds the same checks repeated under another condition.
 <earlier-results-dir> holds the results of an earlier run to compare with.
 --rows also writes the comparison with CRAN as a tab-separated file, one row
-per package, list and job, which readme.py reads.
+per package, list and job with the CPU the job ran on, which readme.py reads.
 """
 import csv
 import os
@@ -243,6 +243,7 @@ def ours(results, label, pkg, kind=None):
         "status": m.get("Status", "did not complete"),
         "problems": found or {},
         "tarball": m.get("Tarball", ""),
+        "cpu": m.get("CPU", ""),
         "then_failed": then_failed,
         "tests": test_failures(log),
     }
@@ -344,7 +345,7 @@ def main(oracle, results, earlier=None, rows=None):
             cells = [short(cran, most), short(a["problems"], most) if a else "-",
                      short(ref["problems"]) if ref else "-", v]
             out.append(f"| {pkg} {t['Version']} | {t['kind']} | {label} | " + " | ".join(cells) + " |")
-            table.append([t["kind"], pkg, t["Version"], label] + cells)
+            table.append([t["kind"], pkg, t["Version"], label] + cells + [a["cpu"] if a else ""])
             theirs = first_error(os.path.join(oracle, t["log"][:-4] + ".install.log"))
             mine = first_error(os.path.join(results, label, pkg, pkg + ".Rcheck", "00install.out"))
             if (theirs or mine) and not other:
@@ -353,7 +354,7 @@ def main(oracle, results, earlier=None, rows=None):
     if rows:
         with open(rows, "w", newline="") as f:
             w = csv.writer(f, delimiter="\t", lineterminator="\n")
-            w.writerow(["kind", "package", "version", "job", "cran", "here", "reference", "verdict"])
+            w.writerow(["kind", "package", "version", "job", "cran", "here", "reference", "verdict", "cpu"])
             w.writerows(table)
     out.append("")
     out.append("Counts per arm\n")

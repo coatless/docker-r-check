@@ -520,7 +520,8 @@ with it. With Fedora's BLIS binary, `irlba` fails with one kernel set and
 so the comparison pins the OpenBLAS and BLIS kernels and records the CPU for
 every run. Pin them on any host whose results you want to compare. MKL has no
 such pin. It runs its AVX2 and AVX-512 code only on Intel CPUs, whatever
-`MKL_CBWR` asks for, so its results depend on the runner. Under MKL
+`MKL_CBWR` asks for, so its results depend on the runner, and the daily
+results name the CPU the MKL checks ran on. Under MKL
 `postshock` fails the same test as at CRAN on an Intel runner and passes on
 AMD ones. `irlba` failed its tests on the AMD runners and passed on an Intel
 one. It also passes on AMD with `MKL_CBWR=COMPATIBLE`, a setting the check

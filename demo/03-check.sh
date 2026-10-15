@@ -301,9 +301,15 @@ done
 
 # check_CRAN_incoming's run-level summary (depends, results, timings) goes to
 # ~/tmp, which in the standalone image is /build/log alongside R's build logs.
+# It is named by the time, as CRAN_2026-10-15T16:22:51.log. Windows and
+# GitHub's artifacts do not allow colons in file names, so they become dashes.
 mkdir -p "$out/log"
 "$ENGINE" cp "$name:/build/log/." "$out/log/.tmp" >/dev/null 2>&1 || true
-find "$out/log/.tmp" -maxdepth 1 -name 'CRAN_*.log' -exec mv {} "$out/log/" \; 2>/dev/null || true
+for f in "$out/log/.tmp"/CRAN_*.log; do
+    [ -e "$f" ] || continue
+    b="$(basename "$f")"
+    mv "$f" "$out/log/${b//:/-}"
+done
 rm -rf "$out/log/.tmp"
 # check_packages_in_dir() keeps each dependency's install log and each check's
 # output in Outputs/.
