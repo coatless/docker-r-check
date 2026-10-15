@@ -519,10 +519,12 @@ with it. With Fedora's BLIS binary, `irlba` fails with one kernel set and
 `lmeInfo` with another. GitHub's runners are a mix of AMD and Intel machines,
 so the comparison pins the OpenBLAS and BLIS kernels and records the CPU for
 every run. Pin them on any host whose results you want to compare. MKL has no
-such pin. Under MKL `irlba` failed its tests on the AMD
-runners and passed on an Intel one. It also passes on AMD with
-`MKL_CBWR=COMPATIBLE`, a setting the check script passes on, though that is
-not the code CRAN's MKL machine runs.
+such pin. It runs its AVX2 and AVX-512 code only on Intel CPUs, whatever
+`MKL_CBWR` asks for, so its results depend on the runner. Under MKL
+`postshock` fails the same test as at CRAN on an Intel runner and passes on
+AMD ones. `irlba` failed its tests on the AMD runners and passed on an Intel
+one. It also passes on AMD with `MKL_CBWR=COMPATIBLE`, a setting the check
+script passes on, though that is not the code CRAN's MKL machine runs.
 
 The checks install dependencies from CRAN and [Bioconductor][bioc] only. A
 package
