@@ -1,702 +1,129 @@
 name: evaluate
 
-# Check CRAN's current BLAS and clang23 issues in the arm that matches each
-# one, with the reference arm as the control, plus a fixed set of other
-# packages in every arm. All arms use the same dated CRAN snapshot, and the
-# report compares the results with CRAN's own logs.
-#
-# The arms are the published images, as the publish workflow last pushed
-# them. With IMAGES=build in eval/run.env a run builds them itself, all from
-# the same R and QA revisions, which is the way to try a change to an arm.
-#
-# A run takes hours. One starts when the branch `evaluate` is pushed, for
-# example with `git push origin HEAD:evaluate`, and eval/run.env says which
-# kinds and jobs it runs. The publish workflow starts a shorter one every
-# day, on the images it has just pushed, and that one writes its results
-# into README.md.
-
+# One-off: blisfedora with Fedora's LAPACK, and postshock and fastPLS in mkl
+# under each of MKL's code paths.
 on:
   push:
     branches: [evaluate]
-  workflow_dispatch:
-    inputs:
-      kinds:
-        description: CRAN issue kinds to run, in place of KINDS in eval/run.env
-      only:
-        description: Job labels to run, in place of ONLY in eval/run.env
-      images:
-        description: Pull the published images, or build the arms in the run. "default" takes IMAGES in eval/run.env.
-        type: choice
-        options: [default, published, build]
-        default: default
-      suite:
-        description: Debian suite of the arms. "default" takes SUITE in eval/run.env.
-        type: choice
-        options: [default, testing, stable]
-        default: default
-      readme:
-        description: Write the results into README.md, as the daily run does
-        type: boolean
-        default: false
-
-permissions:
-  contents: read
-  actions: read
-
-# One run that writes README.md at a time. Other runs do not wait for each
-# other.
-concurrency:
-  group: evaluate-${{ inputs.readme && 'daily' || github.run_id }}
-  cancel-in-progress: false
 
 env:
-  # Small packages of different kinds: C, more C, Fortran, C calling the
-  # BLAS, saved test output that depends on the BLAS, and knitr vignettes.
-  OTHER_PACKAGES: base64enc digest quadprog irlba maxLik jsonlite
-  # jq program for the R-devel revision of a published image. The images
-  # of 2026-10-10 have it in their description only.
-  REV_OF: >-
-    .Labels["rcheck.r-svn-rev"]
-    // ((.Labels["org.opencontainers.image.description"] // "") | capture("R-devel r(?<r>[0-9]+)").r)
+  CRAN_MIRROR: https://packagemanager.posit.co/cran/2026-10-14
+  RCC_MODE: regular
+  RCC_LIBRARY_CACHE: "1"
+  _R_CHECK_ELAPSED_TIMEOUT_: 3600
 
 jobs:
-  targets:
+  mkl:
     runs-on: ubuntu-24.04
-    outputs:
-      r_rev: ${{ steps.pin.outputs.r_rev }}
-      qa_rev: ${{ steps.pin.outputs.qa_rev }}
-      snapshot: ${{ steps.pin.outputs.snapshot }}
-      matrix: ${{ steps.arms.outputs.matrix }}
-      published: ${{ steps.arms.outputs.published }}
-      any_arm: ${{ steps.arms.outputs.any_arm }}
-      any_published: ${{ steps.arms.outputs.any_published }}
-      conditions: ${{ steps.read.outputs.conditions }}
-      baseline: ${{ steps.read.outputs.baseline }}
-      images: ${{ steps.read.outputs.images }}
-      suite: ${{ steps.read.outputs.suite }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: read what to run
-        id: read
-        env:
-          IN_KINDS: ${{ inputs.kinds }}
-          IN_ONLY: ${{ inputs.only }}
-          IN_IMAGES: ${{ inputs.images }}
-          IN_SUITE: ${{ inputs.suite }}
-          IN_README: ${{ inputs.readme }}
-        run: |
-          . eval/run.env
-          # A run that writes README.md takes today's lists and nothing
-          # else, whatever the rest of run.env says.
-          if [ "$IN_README" = true ]; then
-            KINDS=$DAILY_KINDS ONLY="" BASELINE_RUN="" CONDITIONS=""
-          fi
-          [ "${IN_IMAGES:-default}" = default ] || IMAGES=$IN_IMAGES
-          [ "${IN_SUITE:-default}" = default ] || SUITE=$IN_SUITE
-          case "$IMAGES" in published|build) ;; *) echo "IMAGES is '$IMAGES', and it must be published or build"; exit 1 ;; esac
-          case "$SUITE" in testing|stable) ;; *) echo "SUITE is '$SUITE', and it must be testing or stable"; exit 1 ;; esac
-          {
-            echo "KINDS=${IN_KINDS:-$KINDS}"
-            echo "ONLY=${IN_ONLY:-$ONLY}"
-            echo "BASELINE_RUN=$BASELINE_RUN"
-            echo "IMAGES=$IMAGES"
-            echo "SUITE=$SUITE"
-          } | tee -a "$GITHUB_ENV"
-          {
-            echo "conditions=$CONDITIONS"
-            echo "baseline=$BASELINE_RUN"
-            echo "images=$IMAGES"
-            echo "suite=$SUITE"
-          } | tee -a "$GITHUB_OUTPUT"
-
-      - name: take the list and CRAN's logs from an earlier run
-        if: env.BASELINE_RUN != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run download "$BASELINE_RUN" -R "$GITHUB_REPOSITORY" -n oracle -D oracle
-          awk -F'\t' -v kinds=" $KINDS " 'NR == 1 || index(kinds, " " $3 " ")' oracle/targets.tsv > targets.tsv
-          mv targets.tsv oracle/targets.tsv
-          sed -i '/^Kinds: /d; /^Suite: /d; /^Images: /d; /^Images-differ: /d' oracle/run.txt
-          rm -f oracle/images.tsv
-          {
-            echo "Kinds: $KINDS"
-            echo "Suite: $SUITE"
-            echo "Images: $IMAGES"
-            echo "Baseline-run: $BASELINE_RUN"
-          } >> oracle/run.txt
-          cat oracle/run.txt
-          cut -f1-3,5 oracle/targets.tsv | column -t -s $'\t'
-
-      - name: pin the revisions and the snapshot for every arm
-        id: pin
-        run: |
-          if [ -n "$BASELINE_RUN" ]; then
-            r_rev=$(sed -n 's/^R-revision: //p' oracle/run.txt)
-            qa_rev=$(sed -n 's/^QA-revision: //p' oracle/run.txt)
-            snapshot=$(sed -n 's/^CRAN-snapshot: //p' oracle/run.txt)
-          elif [ "$IMAGES" = published ]; then
-            # The revisions the published reference image was built from.
-            # The other arms are compared with them further down.
-            name=reference; [ "$SUITE" = testing ] || name="reference-$SUITE"
-            skopeo inspect --no-tags "docker://ghcr.io/${GITHUB_REPOSITORY,,}:$name" > image.json
-            r_rev=$(jq -r "$REV_OF" image.json)
-            qa_rev=$(jq -r '.Labels["rcheck.qa-svn-rev"] // "unknown"' image.json)
-            snapshot=$(date -u -d '1 day ago' +%Y-%m-%d)
-          else
-            r_rev=$(curl -fsSL https://svn.r-project.org/R/trunk/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
-            qa_rev=$(curl -fsSL https://svn.r-project.org/R-dev-web/trunk/CRAN/QA/Kurt/ | sed -n 's/.*Revision \([0-9][0-9]*\).*/\1/p' | head -n 1)
-            snapshot=$(date -u -d '1 day ago' +%Y-%m-%d)
-          fi
-          [ -n "$r_rev" ] && [ -n "$qa_rev" ] && [ -n "$snapshot" ]
-          {
-            echo "r_rev=$r_rev"
-            echo "qa_rev=$qa_rev"
-            echo "snapshot=$snapshot"
-          } | tee -a "$GITHUB_OUTPUT"
-
-      - name: save CRAN's current issues and their logs
-        if: env.BASELINE_RUN == ''
-        env:
-          R_REV: ${{ steps.pin.outputs.r_rev }}
-          QA_REV: ${{ steps.pin.outputs.qa_rev }}
-          SNAPSHOT: ${{ steps.pin.outputs.snapshot }}
-        run: |
-          set -o pipefail
-          mkdir -p oracle/logs
-          cd oracle
-          curl -fsSL -D rds.headers -o check_issues.rds https://cran.r-project.org/web/checks/check_issues.rds
-          curl -fsSL -o README.txt https://www.stats.ox.ac.uk/pub/bdr/Rblas/README.txt
-          docker run --rm --user "$(id -u):$(id -g)" -e KINDS -v "$GITHUB_WORKSPACE:/w" -w /w/oracle \
-            docker.io/library/r-base:latest Rscript /w/eval/targets.R
-          tail -n +2 targets.tsv | while IFS=$'\t' read -r pkg _ kind href _ log install; do
-            case "$href" in
-            */memtests/*)
-              # A sanitizer or valgrind result is a directory. Its check log
-              # becomes the log, and the outputs with the errors go beside it.
-              d="${log%.out}.d"
-              tests=$(curl -fsSL "$href/tests/" 2>/dev/null |
-                grep -oE 'href="[^"?/][^"]*"' | sed 's/^href="/tests\//; s/"$//' || true)
-              for f in 00check.log 00install.out "$pkg-Ex.Rout" $tests; do
-                curl -fsSL --create-dirs --max-filesize 30000000 -o "$d/$f" "$href/$f" 2>/dev/null || true
-              done
-              cp "$d/00check.log" "$log" || echo "could not fetch $href ($pkg, $kind)"
-              continue ;;
-            esac
-            curl -fsSL -o "$log" "$href" || echo "could not fetch $href ($pkg, $kind)"
-            if [ "$install" != - ]; then
-              curl -fsSL --max-filesize 3000000 -o "${log%.out}.install.log" "$install" ||
-                echo "did not keep $install (too large or missing)"
-            fi
-          done
-          {
-            echo "R-revision: $R_REV"
-            echo "QA-revision: $QA_REV"
-            echo "CRAN-snapshot: $SNAPSHOT"
-            echo "check_issues-Last-Modified: $(sed -n 's/^[Ll]ast-[Mm]odified: //p' rds.headers | tr -d '\r')"
-            echo "Fetched: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "Kinds: $KINDS"
-            echo "Suite: $SUITE"
-            echo "Images: $IMAGES"
-          } > run.txt
-          cat run.txt
-          cut -f1-3,5 targets.tsv | column -t -s $'\t' 
-
-      - name: choose the arms
-        id: arms
-        run: |
-          python3 - <<'EOF' | tee -a "$GITHUB_OUTPUT"
-          import csv, json, math, os, re
-          count, control = {}, 0
-          for row in csv.DictReader(open("oracle/targets.tsv"), delimiter="\t"):
-              count[row["arm"]] = count.get(row["arm"], 0) + 1
-              # The packages reference checks as the control. Keep this in
-              # step with the check job's own choice.
-              control += row["arm"] in ("openblas", "mkl", "blis", "atlas", "nold", "arm64") or row["install_href"] != "-"
-          # A long control list is split over several jobs, like any other.
-          shards = max(1, min(20, math.ceil(control / 8)))
-          jobs = [{"arm": "reference", "targets": "reference", "label": "reference", "shard": s, "shards": shards}
-                  for s in range(1, shards + 1)]
-          # Lists that run in an image someone else publishes, not in an arm.
-          published = []
-          # Arms with nothing on CRAN's list today still check the other packages.
-          for arm in ("openblas", "mkl", "atlas"):
-              count.setdefault(arm, 0)
-          for arm in sorted(count):
-              # A long list is split over several jobs of about 10 packages.
-              shards = max(1, min(20, math.ceil(count[arm] / 10)))
-              if arm in ("musl", "rchk"):
-                  published += [{"kind": arm, "label": arm, "shard": s, "shards": shards}
-                                for s in range(1, shards + 1)]
-                  continue
-              if arm == "donttest":
-                  # The reference arm, with the \\donttest examples switched on.
-                  jobs += [{"arm": "reference", "targets": arm, "label": arm, "shard": s, "shards": shards,
-                            "check_env": "_R_CHECK_DONTTEST_EXAMPLES_=true"}
-                           for s in range(1, shards + 1)]
-                  continue
-              if arm != "blis":
-                  jobs += [{"arm": arm, "targets": arm, "label": arm, "shard": s, "shards": shards}
-                           for s in range(1, shards + 1)]
-                  continue
-              # CRAN's BLIS is Fedora's 2.0-5, so besides Debian's BLIS run
-              # Fedora's own binary. BLIS picks its kernels from the CPU and the
-              # results depend on them, so every job pins the kernel set. skx
-              # needs AVX-512, which only some runners have.
-              builds = [("blis", "blis"), ("blisfedora", "blis-fedora")]
-              jobs += [{"arm": a, "targets": "blis", "label": f"{label}-{k}", "blis_arch": k,
-                        "shard": 1, "shards": 1}
-                       for a, label in builds for k in ("zen3", "haswell", "skx")]
-          # An arm that does not build on the run's Debian suite has no job.
-          def builds_here(arm):
-              m = re.search(r'^RCC_SUITES="([^"]*)"', open(f"docker/flavours/{arm}.env").read(), re.M)
-              return os.environ["SUITE"] in (m.group(1) if m else "testing stable").split()
-          jobs = [j for j in jobs if builds_here(j["arm"])]
-          only = os.environ.get("ONLY", "").split()
-          keep = lambda j: not only or j["label"] in only or f'{j["label"]}#{j["shard"]}' in only
-          jobs, published = [j for j in jobs if keep(j)], [j for j in published if keep(j)]
-          print("matrix=" + json.dumps({"include": jobs}))
-          print("published=" + json.dumps({"include": published}))
-          # A job with an empty matrix is an error, so say which lists have jobs.
-          print("any_arm=" + ("yes" if jobs else "no"))
-          print("any_published=" + ("yes" if published else "no"))
-          EOF
-
-      - name: find the published images
-        if: env.IMAGES == 'published' && steps.arms.outputs.any_arm == 'yes'
-        env:
-          MATRIX: ${{ steps.arms.outputs.matrix }}
-          R_REV: ${{ steps.pin.outputs.r_rev }}
-        run: |
-          # Each arm's image by its digest, so that every job of the run
-          # uses the same one even if a new one is pushed meanwhile.
-          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
-          printf 'arm\timage\tr_rev\tqa_rev\tbuilt\n' > oracle/images.tsv
-          differ=""
-          for arm in $(jq -r '.include[].arm' <<<"$MATRIX" | sort -u); do
-            name="$arm"; [ "$SUITE" = testing ] || name="$arm-$SUITE"
-            # A run on an earlier run's revisions takes the images of that
-            # R revision.
-            [ -z "$BASELINE_RUN" ] || name="$name-r$R_REV"
-            # shellcheck disable=SC1090 # the arm file names its architecture
-            arch=$(. "docker/flavours/$arm.env" && echo "$RCC_ARCH")
-            if ! skopeo inspect --no-tags --override-os linux --override-arch "$arch" "docker://$repo:$name" > image.json; then
-              echo "$repo:$name is not published. IMAGES=build in eval/run.env builds the arms in the run."
-              exit 1
-            fi
-            # The tag says which suite an image should be. Its label says
-            # which one it was built on. An image without the label was
-            # pushed before the publish workflow recorded the suite.
-            suite=$(jq -r '.Labels["rcheck.suite"] // "an unrecorded suite"' image.json)
-            if [ "$suite" != "$SUITE" ]; then
-              echo "$repo:$name was built on Debian $suite, and this run is for $SUITE."
-              exit 1
-            fi
-            rev=$(jq -r "$REV_OF" image.json)
-            built=$(jq -r '.Labels["rcheck.built"] // .Created[0:10]' image.json)
-            printf '%s\t%s\t%s\t%s\t%s\n' "$arm" "$repo@$(jq -r .Digest image.json)" "$rev" \
-              "$(jq -r '.Labels["rcheck.qa-svn-rev"] // "unknown"' image.json)" "$built" >> oracle/images.tsv
-            [ "$rev" = "$R_REV" ] || differ="$differ, $arm (r$rev, built $built)"
-          done
-          column -t -s $'\t' oracle/images.tsv
-          # An arm whose last build failed still has its image from before.
-          [ -z "$differ" ] || echo "Images-differ: ${differ#, }" | tee -a oracle/run.txt
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: oracle
-          path: oracle/
-
-  check:
-    needs: targets
-    if: needs.targets.outputs.any_arm == 'yes'
-    # The arm64 arm builds and checks on an arm64 runner, the others on x86.
-    runs-on: ${{ matrix.arm == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
-    timeout-minutes: 350
+    timeout-minutes: 200
     strategy:
       fail-fast: false
-      # GitHub gives up on a job that has not got a runner after 15 minutes,
-      # so do not ask for more runners at once than it hands out.
-      max-parallel: 8
-      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
-    env:
-      ARM: ${{ matrix.arm }}
-      TARGETS: ${{ matrix.targets }}
-      LABEL: ${{ matrix.label }}
-      BLIS_ARCH_TYPE: ${{ matrix.blis_arch }}
-      CHECK_ENV: ${{ matrix.check_env }}
-      CONDITIONS: ${{ needs.targets.outputs.conditions }}
-      SHARD: ${{ matrix.shard }}
-      SHARDS: ${{ matrix.shards }}
-      R_REV: ${{ needs.targets.outputs.r_rev }}
-      QA_REV: ${{ needs.targets.outputs.qa_rev }}
-      SNAPSHOT: ${{ needs.targets.outputs.snapshot }}
-      IMAGES: ${{ needs.targets.outputs.images }}
-      SUITE: ${{ needs.targets.outputs.suite }}
+      matrix:
+        runner: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v5
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: oracle
-          path: oracle
 
       - name: reclaim disk
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost /usr/local/lib/node_modules \
-                      /opt/hostedtoolcache /usr/share/swift /usr/local/.ghcup \
-                      /usr/local/share/powershell /usr/lib/jvm /opt/az /opt/microsoft || true
-          sudo docker image prune -af || true
+                      /opt/hostedtoolcache /usr/share/swift /usr/local/.ghcup || true
           df -h /
 
-      - name: can this runner use the pinned kernels
+      - name: pull mkl
         run: |
-          mkdir -p "out/$LABEL"
-          {
-            echo "cpu: $(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -n 1)"
-            echo "cores: $(nproc)"
-            echo "memory: $(free -g | awk '/^Mem/ {print $2}') GiB"
-            echo "avx512: $(grep -qw avx512f /proc/cpuinfo && echo yes || echo no)"
-          } | tee "out/$LABEL/runner.txt"
-          if [ "$BLIS_ARCH_TYPE" = skx ] && ! grep -qw avx512f /proc/cpuinfo; then
-            echo "this runner's CPU has no AVX-512, so the skx kernels were not run" | tee "out/$LABEL/SKIPPED-$SHARD"
-            echo "SKIP=1" >> "$GITHUB_ENV"
-          fi
+          docker pull --quiet ghcr.io/coatless/docker-r-check:mkl
+          docker tag ghcr.io/coatless/docker-r-check:mkl rcc-standalone:mkl
+          docker run --rm --entrypoint cat rcc-standalone:mkl /etc/rcheck/manifest.txt
+
+      - name: check under each code path
+        run: |
+          cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -n 1)
+          avx512=$(grep -qw avx512f /proc/cpuinfo && echo yes || echo no)
+          settings="default MKL_CBWR=COMPATIBLE MKL_CBWR=AVX2"
+          [ "$avx512" = no ] || settings="$settings MKL_CBWR=AVX512"
+          case "$cpu" in *Intel*) settings="$settings MKL_ENABLE_INSTRUCTIONS=AVX2" ;; esac
+          mkdir -p out
+          for s in $settings; do
+            ( [ "$s" = default ] || export "${s?}"
+              demo/03-check.sh mkl postshock fastPLS > "out/$s.log" 2>&1 || true )
+            for p in postshock fastPLS; do
+              d="results/mkl/$p"
+              st=$(grep -h '^Status' "$d/$p.Rcheck/00check.log" 2>/dev/null || echo "no status")
+              code=$(sed -n 's/^MKL-Code: //p' "$d/manifest.dcf" 2>/dev/null)
+              why=$(grep -h -m 1 -E '── (Failure|Error)' "$d/$p.Rcheck/tests/testthat.Rout.fail" 2>/dev/null || true)
+              printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$cpu" "$avx512" "$s" "$p" "$st" "$code" "$why" | tee -a out/summary.tsv
+            done
+            cp -r results/mkl "out/results-$s"
+          done
+          { echo '```'; cat out/summary.tsv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mkl-${{ matrix.runner }}
+          path: out
+
+  blisfedora:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: reclaim disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          df -h /
 
       - name: add swap
-        if: env.SKIP != '1'
         run: |
-          # Exporting the finished image takes about 15 GiB of memory, which is
-          # all a runner has. Without more swap the runner is shut down.
           sudo fallocate -l 16G /rcc-swap
           sudo chmod 600 /rcc-swap
           sudo mkswap /rcc-swap > /dev/null
           sudo swapon /rcc-swap
-          free -h
 
-      - name: pull or build the arm
-        if: env.SKIP != '1'
+      - name: build
         run: |
           set -o pipefail
-          if [ "$IMAGES" = published ]; then
-            # The image the targets job found for this arm.
-            image=$(awk -F'\t' -v a="$ARM" '$1 == a {print $2}' oracle/images.tsv)
-            if [ -z "$image" ] || ! docker pull --quiet "$image" 2>&1 | tee build.log; then
-              { echo "could not pull the published image of $ARM: $image"; tail -n 20 build.log; } > "out/$LABEL/BUILD-FAILED"
-              exit 1
-            fi
-            docker tag "$image" "rcc-standalone:$ARM"
-          else
-            # Every job downloads the same sources. Do not start them all in
-            # the same second.
-            sleep $((RANDOM % 120))
-            # shellcheck disable=SC1090 # the arm file names its architecture
-            arch=$(. "docker/flavours/$ARM.env" && echo "$RCC_ARCH")
-            # The base refuses to build for anything but amd64 unless told to.
-            if ! docker build --progress=plain --platform "linux/$arch" --target standalone \
-                   --build-arg ALLOW_NON_AMD64="$([ "$arch" = amd64 ] || echo 1)" \
-                   --build-arg DEBIAN_TAG="$SUITE" --build-arg RCC_FLAVOUR="$ARM" \
-                   --build-arg R_SVN_REV="$R_REV" --build-arg QA_SVN_REV="$QA_REV" \
-                   --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
-                   -t "rcc-standalone:$ARM" docker/ 2>&1 | tee build.log; then
-              tail -n 20 build.log > "out/$LABEL/BUILD-FAILED"
-              exit 1
-            fi
-          fi
+          docker build --progress=plain --platform linux/amd64 --target standalone \
+            --build-arg DEBIAN_TAG=testing --build-arg RCC_FLAVOUR=blisfedora \
+            --build-arg MAKEFLAGS=-j4 --build-arg BUILD_DATE="$(date -u +%Y-%m-%d)" \
+            -t rcc-standalone:blisfedora docker/ 2>&1 | tail -n 300
+
+      - name: what R loads
+        run: |
           {
-            docker run --rm --entrypoint cat "rcc-standalone:$ARM" /etc/rcheck/manifest.txt
-            echo "cxx: $(docker run --rm --entrypoint /build/bin/R "rcc-standalone:$ARM" CMD config CXX)"
-          } | tee "out/$LABEL/manifest.txt"
+            echo '```'
+            docker run --rm --entrypoint cat rcc-standalone:blisfedora /etc/rcheck/r-blas.txt
+            docker run --rm --entrypoint /build/bin/R rcc-standalone:blisfedora --no-echo --vanilla -e '
+              cat("BLAS   :", extSoftVersion()[["BLAS"]], "\n")
+              cat("LAPACK :", La_library(), La_version(), "\n")
+              set.seed(1); m <- crossprod(matrix(rnorm(1e4), 100))
+              cat("chol ok:", isTRUE(all.equal(crossprod(chol(m)), m)), "\n")
+              cat("svd d1 :", format(svd(m)$d[1], digits = 15), "\n")'
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: check the packages
-        if: env.SKIP != '1'
+      - name: check the BLIS entries it reproduces
         env:
-          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
-          RCC_MODE: regular
-          OPENBLAS_CORETYPE: Haswell
-          # One hour for any one step of a check, so a test that hangs does
-          # not use up the job.
-          _R_CHECK_ELAPSED_TIMEOUT_: 3600
+          BLIS_ARCH_TYPE: haswell
         run: |
-          # reference is the control for every BLAS and noLD issue, and for the
-          # packages that fail to install at CRAN. An LTO warning or a
-          # sanitizer error needs its own build, so those have no control.
-          case "$LABEL" in
-          reference)
-            targets=$(tail -n +2 oracle/targets.tsv |
-              awk -F'\t' '$5 ~ /^(openblas|mkl|blis|atlas|nold|arm64)$/ || $7 != "-" {print $1}' |
-              awk -v n="$SHARDS" -v k="$SHARD" '!seen[$0]++ && i++ % n == k - 1') ;;
-          *)
-            targets=$(tail -n +2 oracle/targets.tsv |
-              awk -F'\t' -v a="$TARGETS" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1}') ;;
-          esac
-          [ "$SHARD" = 1 ] || OTHER_PACKAGES=""
-          curl -fsSL -o PACKAGES "$CRAN_MIRROR/src/contrib/PACKAGES"
-          pkgs=""
-          # The package lists are split on purpose here and below.
-          # shellcheck disable=SC2086
-          for p in $(printf '%s\n' $targets $OTHER_PACKAGES | awk '!seen[$0]++'); do
-            # Check the version CRAN's log is for. The snapshot is a day old,
-            # so a package published since, or one that has left CRAN, comes
-            # from CRAN itself or from its archive.
-            v=$(awk -F'\t' -v p="$p" '$1 == p {print $2; exit}' oracle/targets.tsv)
-            have=$(awk -v p="$p" '$0 == "Package: " p {f = 1; next} f && /^Version:/ {print $2; exit}' PACKAGES)
-            f="archive/${p}_$v.tar.gz"
-            if [ -n "$have" ] && { [ -z "$v" ] || [ "$have" = "$v" ]; }; then
-              pkgs="$pkgs $p"
-            elif [ -n "$v" ] && { curl -fsSL --create-dirs -o "$f" "https://cloud.r-project.org/src/contrib/${p}_$v.tar.gz" ||
-                   curl -fsSL --create-dirs -o "$f" "https://cloud.r-project.org/src/contrib/Archive/$p/${p}_$v.tar.gz"; }; then
-              pkgs="$pkgs $f"
-            elif [ -n "$have" ]; then
-              pkgs="$pkgs $p"
-            else
-              echo "$p is not in the $SNAPSHOT snapshot, so it was not checked" | tee -a "out/$LABEL/SKIPPED-$SHARD"
-            fi
-          done
-          echo "checking in $ARM:$pkgs"
-          echo "$pkgs" > pkgs.txt
-          # Settings for this list, such as running the \donttest examples.
-          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
-          # The other conditions reuse the installed dependencies.
-          [ -z "$CONDITIONS" ] || export RCC_LIBRARY_CACHE=1
-          # Stop the container before the job's time limit, so that the results
-          # of the packages it finished are still collected.
-          ( sleep $((285 * 60))
-            echo "time limit reached, stopping the check container" | tee -a "out/$LABEL/SKIPPED-$SHARD"
-            docker ps -q --filter name=rcc-check- | xargs -r docker stop -t 10 ) &
-          watchdog=$!
-          # shellcheck disable=SC2086
-          demo/03-check.sh "$ARM" $pkgs || echo "03-check.sh exited $?"
-          kill "$watchdog" 2>/dev/null || true
-
-      - name: repeat the checks through check_packages_in_dir()
-        if: env.SKIP != '1' && contains(env.CONDITIONS, 'dir')
-        env:
-          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
-          RCC_MODE: regular
-          OPENBLAS_CORETYPE: Haswell
-          _R_CHECK_ELAPSED_TIMEOUT_: 3600
-          RCC_RUNNER: dir
-        run: |
-          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
-          # shellcheck disable=SC2046
-          RCC_RESULTS="$PWD/results@dir" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
-            echo "03-check.sh exited $?"
-
-      - name: repeat the checks in two containers, the second cut off
-        if: env.SKIP != '1' && contains(env.CONDITIONS, 'isolated')
-        env:
-          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
-          RCC_MODE: regular
-          OPENBLAS_CORETYPE: Haswell
-          _R_CHECK_ELAPSED_TIMEOUT_: 3600
-          RCC_ISOLATE: 1
-        run: |
-          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
-          # shellcheck disable=SC2046
-          RCC_RESULTS="$PWD/results@isolated" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
-            echo "03-check.sh exited $?"
-
-      - name: repeat the checks with the network cut off
-        if: env.SKIP != '1' && contains(env.CONDITIONS, 'offline')
-        env:
-          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
-          RCC_MODE: regular
-          OPENBLAS_CORETYPE: Haswell
-          _R_CHECK_ELAPSED_TIMEOUT_: 3600
-          RCC_LIBRARY_CACHE: 1
-          RCC_NETWORK: none
-        run: |
-          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
-          # shellcheck disable=SC2046
-          RCC_RESULTS="$PWD/results@offline" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
-            echo "03-check.sh exited $?"
-
-      - name: repeat the checks under Podman
-        if: env.SKIP != '1' && contains(env.CONDITIONS, 'podman')
-        env:
-          CRAN_MIRROR: https://packagemanager.posit.co/cran/${{ needs.targets.outputs.snapshot }}
-          RCC_MODE: regular
-          OPENBLAS_CORETYPE: Haswell
-          _R_CHECK_ELAPSED_TIMEOUT_: 3600
-          RCC_ENGINE: podman
-        run: |
-          podman --version
-          podman info --format 'storage driver: {{.Store.GraphDriverName}}'
-          # The same image, copied from Docker's store into Podman's.
-          docker save "rcc-standalone:$ARM" | podman load
-          [ -z "$CHECK_ENV" ] || export "${CHECK_ENV?}"
-          # shellcheck disable=SC2046
-          RCC_RESULTS="$PWD/results@podman" demo/03-check.sh "$ARM" $(cat pkgs.txt) ||
-            echo "03-check.sh exited $?"
-
-      - name: keep the logs
-        if: always()
-        run: |
-          for r in results results@dir results@isolated results@offline results@podman; do
-            [ -d "$r/$ARM" ] || continue
-            o="out/$LABEL${r#results}"
-            # The console log covers every package of the job, so keep it once.
-            mkdir -p "$o"
-            cp "$r/$ARM"/console-*.log "$o/" 2>/dev/null || true
-            for d in "$r/$ARM"/*/; do
-              p=$(basename "$d")
-              [ -f "$d/manifest.dcf" ] || continue
-              mkdir -p "$o/$p"
-              cp "$d/manifest.dcf" "$o/$p/"
-              if [ -d "$d/$p.Rcheck" ]; then
-                mkdir -p "$o/$p/$p.Rcheck"
-                (cd "$d/$p.Rcheck" && find . -maxdepth 2 \( -name '00check.log' -o -name '00install.out' \
-                   -o -name '*.Rout' -o -name '*.Rout.fail' -o -name '*.Rout.save' -o -name '*-Ex.Rout' \) \
-                   -exec cp --parents {} "$GITHUB_WORKSPACE/$o/$p/$p.Rcheck/" \;)
-              fi
+          mkdir -p out
+          demo/03-check.sh blisfedora ISwR micEconDistRay postshock WpProj > out/check.log 2>&1 || true
+          {
+            echo '```'
+            sed -n 's/^CPU: /cpu: /p; s/^BLIS-Arch: /blis: /p' results/blisfedora/postshock/manifest.dcf
+            for p in ISwR micEconDistRay postshock WpProj; do
+              echo "$p: $(grep -h '^Status' "results/blisfedora/$p/$p.Rcheck/00check.log" 2>/dev/null || echo 'no status')"
             done
-          done
-          cp build.log "out/$LABEL/" 2>/dev/null || true
-          du -sh out/*
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          cp -r results/blisfedora out/
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: results-${{ matrix.label }}-${{ matrix.shard }}
-          path: out/
-
-  # The musl and rchk lists, in the images their maintainers publish.
-  published:
-    needs: targets
-    if: needs.targets.outputs.any_published == 'yes'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 350
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix: ${{ fromJSON(needs.targets.outputs.published) }}
-    env:
-      KIND: ${{ matrix.kind }}
-      SHARD: ${{ matrix.shard }}
-      SHARDS: ${{ matrix.shards }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: oracle
-          path: oracle
-
-      - name: run the packages in the published image
-        run: |
-          mkdir -p src "out/$KIND"
-          tarballs=""
-          # The version CRAN's result is for, from CRAN or from its archive.
-          while IFS=$'\t' read -r p v; do
-            f="src/${p}_$v.tar.gz"
-            if curl -fsSL -o "$f" "https://cloud.r-project.org/src/contrib/${p}_$v.tar.gz" ||
-               curl -fsSL -o "$f" "https://cloud.r-project.org/src/contrib/Archive/$p/${p}_$v.tar.gz"; then
-              tarballs="$tarballs $f"
-            else
-              echo "$p $v could not be fetched, so it was not checked" | tee -a "out/$KIND/SKIPPED-$SHARD"
-            fi
-          done < <(tail -n +2 oracle/targets.tsv |
-            awk -F'\t' -v a="$KIND" -v n="$SHARDS" -v k="$SHARD" '$5 == a && i++ % n == k - 1 {print $1 "\t" $2}')
-          # shellcheck disable=SC2086 # the list is split on purpose
-          eval/published.sh "$KIND" "$PWD/results" $tarballs || echo "published.sh exited $?"
-          cp -R "results/$KIND/." "out/$KIND/" 2>/dev/null || true
-          du -sh out/*
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: results-${{ matrix.label }}-${{ matrix.shard }}
-          path: out/
-
-  report:
-    needs: [targets, check, published]
-    if: always() && needs.targets.result == 'success'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: oracle
-          path: oracle
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: results-*
-          merge-multiple: true
+          name: blisfedora
           path: out
-
-      - name: fetch the earlier run's results
-        if: needs.targets.outputs.baseline != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASELINE_RUN: ${{ needs.targets.outputs.baseline }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BASELINE_RUN/artifacts" --paginate \
-            --jq '.artifacts[].name' | grep '^results-' | sort -u > names.txt
-          mkdir -p baseline
-          while read -r name; do
-            rm -rf dl
-            gh run download "$BASELINE_RUN" -R "$GITHUB_REPOSITORY" -n "$name" -D dl
-            cp -Rn dl/. baseline/
-          done < names.txt
-          ls baseline
-
-      - name: compare with CRAN
-        run: |
-          python3 eval/report.py --rows rows.tsv oracle out baseline | tee report.md
-          cat report.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: write the results as they would go into README.md
-        run: |
-          python3 eval/readme.py rows.tsv oracle/run.txt README.md eval/daily.tsv \
-            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > section.md
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: report
-          path: |
-            report.md
-            rows.tsv
-            section.md
-
-  # The daily run's results go into README.md on the branch it ran from.
-  readme:
-    needs: report
-    if: always() && needs.report.result == 'success' && inputs.readme
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          # The branch as it is now. It may have moved during the run.
-          ref: ${{ github.ref_name }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: oracle
-          path: oracle
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: report
-          path: report
-
-      - name: write the results into README.md
-        run: |
-          python3 eval/readme.py report/rows.tsv oracle/run.txt README.md eval/daily.tsv \
-            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md eval/daily.tsv
-          if git diff --cached --quiet; then
-            echo "nothing to update"
-            exit 0
-          fi
-          git commit -q -m "update the daily results in README.md"
-          # The branch may have moved again since the checkout.
-          git push || { git pull --rebase && git push; }
