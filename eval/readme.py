@@ -171,8 +171,8 @@ def section(entries, silent, run, old, old_date, url):
     out.append("")
     if any("`blis" in e["shown"] for e in entries.values()):
         out += [para("A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3` is "
-                     "Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's binary "
-                     "with the haswell kernels."), ""]
+                     "Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's BLIS and "
+                     "LAPACK, as at CRAN, with the haswell kernels."), ""]
     # An arm whose build failed that day is checked in its image from before.
     other = re.findall(r"(\S+) \(r(\d+), built ([^)]*)\)", run.get("Images-differ", ""))
     if other:

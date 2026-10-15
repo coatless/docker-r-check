@@ -60,13 +60,14 @@ flavour_spec() {
             "liblapack.so-$MA|$L/lapack/liblapack.so"
         ;;
     blisfedora)
-        # A BLIS in /opt/blis, registered by flavours/blis-register.sh.
+        # Fedora's BLIS in /opt/blis and its LAPACK in /opt/lapack,
+        # registered by flavours/blisfedora-setup.sh.
         printf '%s\n' \
             "libblis.so.4-$MA|/opt/blis/lib/libblis.so.4" \
             "libblas.so.3-$MA|/opt/blis/lib/libblis.so.4" \
-            "liblapack.so.3-$MA|$L/lapack/liblapack.so.3" \
+            "liblapack.so.3-$MA|/opt/lapack/lib/liblapack.so.3" \
             "libblas.so-$MA|/opt/blis/lib/libblis.so" \
-            "liblapack.so-$MA|$L/lapack/liblapack.so"
+            "liblapack.so-$MA|/opt/lapack/lib/liblapack.so"
         ;;
     mkl|clang23|clangsan)
         # MKL is linked by path and does not use alternatives. clang23 uses
@@ -96,6 +97,15 @@ expected_fragment() {
     mkl)       echo "/opt/intel/oneapi/mkl/" ;;
     clang23|clangsan) echo "libRblas.so" ;;
     *)         echo "" ;;
+    esac
+}
+
+# A fragment of the path R must report for its LAPACK, for the arms whose
+# LAPACK is not Debian's. Empty means it is not asserted.
+expected_lapack_fragment() {
+    case "$1" in
+    blisfedora) echo "/opt/lapack/" ;;
+    *)          echo "" ;;
     esac
 }
 
@@ -168,5 +178,8 @@ verify) [ $# -ge 2 ] || { echo "usage: $0 verify <flavour>" >&2; exit 2; }
 show)   do_show ;;
 expect) [ $# -ge 2 ] || { echo "usage: $0 expect <flavour>" >&2; exit 2; }
         expected_fragment "$2" ;;
-*)      echo "usage: $0 {apply|verify|show|expect} [flavour]" >&2; exit 2 ;;
+expect-lapack)
+        [ $# -ge 2 ] || { echo "usage: $0 expect-lapack <flavour>" >&2; exit 2; }
+        expected_lapack_fragment "$2" ;;
+*)      echo "usage: $0 {apply|verify|show|expect|expect-lapack} [flavour]" >&2; exit 2 ;;
 esac

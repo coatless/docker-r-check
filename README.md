@@ -70,7 +70,7 @@ There are thirteen arms. Each one changes a single thing against `reference`.
 | `atlas` | ATLAS 3.10.3, with its LAPACK 3.11.0 | `--with-blas=-lblas --with-lapack=-llapack` |
 | `mkl` | Serial Intel MKL 2026.1, BLAS and LAPACK | `-bm` |
 | `blis` | Serial BLIS 2.1, with Debian's LAPACK 3.12.1 | `--with-blas=-lblas --with-lapack=-llapack` |
-| `blisfedora` | The BLIS binary from Fedora's `blis-2.0-5` package, which is the one CRAN uses | `--with-blas=-lblas --with-lapack=-llapack` |
+| `blisfedora` | The BLIS and LAPACK binaries from Fedora's `blis-2.0-5` and `lapack-3.12.0-11` packages, the ones CRAN uses | `--with-blas=-lblas --with-lapack=-llapack` |
 | `clang23` | clang 23 and flang 23, with libc++ | `-fc/23 -bi` |
 | `nold` | R built without long double | `-bi --disable-long-double` |
 | `lto` | R and every package it installs built with link-time optimization | `-bi --enable-lto` |
@@ -129,7 +129,7 @@ DEBIAN_TAG=stable` for `docker build`.
 RCC_SUITE=stable demo/01-build.sh reference openblas
 ```
 
-`blisfedora` loads a Fedora binary that needs the glibc of testing. On stable
+`blisfedora` loads Fedora binaries that need the glibc of testing. On stable
 the `blis` arm fetches testing's BLIS 2.1, and the two clang 23 arms use
 apt.llvm.org's repository for the release. On testing they use its repository
 for unstable, because it has none for testing. An image's manifest names its
@@ -237,7 +237,7 @@ CRAN's lists as of 2026-10-14 22:53 GMT.
 
 A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
-binary with the haswell kernels.
+BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
 No results came from `blis-fedora-skx` and `blis-skx` this time.
 
@@ -545,9 +545,11 @@ since valgrind's banner is in the output.
 The `arm64` arm lacks `quarto` and `openbugs`, which have no arm64 packages.
 CRAN's own arm64 checks use the R release on Ubuntu.
 
-`blisfedora` is not a pure Debian arm. It loads a Fedora binary that needs
-glibc 2.43, so it builds on Debian testing only. I kept it because it shows
-which of CRAN's BLIS results come from Fedora's build of BLIS.
+`blisfedora` is not a pure Debian arm. It loads Fedora's BLIS and LAPACK,
+the two libraries CRAN's BLIS checks use, and they need glibc 2.43, so it
+builds on Debian testing only. I kept it because it is the one arm that runs
+CRAN's BLIS setup. The `blis` arm shows whether a result also appears with
+Debian's builds of the two.
 
 In the `clang23` and `clangsan` arms some packages cannot be checked. These
 arms compile C++ with libc++, and Debian builds its C++ system libraries with
@@ -657,7 +659,8 @@ The code this fork adds is licensed under GPL (>= 2), as R is.
 - [Debian's tracker page for ATLAS][atlas]
 - [Posit Package Manager][p3m], for dated CRAN snapshots
 - [OpenBLAS][openblas], [BLIS][blis] and [Intel MKL][mkl]
-- [Fedora's `blis` package][fedora-blis], the source of the `blisfedora` binary
+- [Fedora's `blis`][fedora-blis] and [`lapack`][fedora-lapack] packages, the
+  source of the `blisfedora` binaries
 - [apt.llvm.org][apt-llvm], the source of clang 23 and flang 23
 - [GDAL][gdal] and [its releases][gdal-releases], built with libc++ for the
   clang arms
@@ -683,6 +686,7 @@ The code this fork adds is licensed under GPL (>= 2), as R is.
 [blis]: https://github.com/flame/blis
 [mkl]: https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html
 [fedora-blis]: https://src.fedoraproject.org/rpms/blis
+[fedora-lapack]: https://src.fedoraproject.org/rpms/lapack
 [apt-llvm]: https://apt.llvm.org/
 [gdal]: https://gdal.org/
 [gdal-releases]: https://github.com/OSGeo/gdal/releases
@@ -693,6 +697,6 @@ The code this fork adds is licensed under GPL (>= 2), as R is.
 [cran-cloud]: https://cloud.r-project.org/
 [cran-mirrors]: https://cran.r-project.org/mirrors.html
 [bioc]: https://bioconductor.org/
-[fedora-koji]: https://kojipkgs.fedoraproject.org/packages/blis/
+[fedora-koji]: https://kojipkgs.fedoraproject.org/packages/
 [ghcr]: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry
 [podman]: https://podman.io/

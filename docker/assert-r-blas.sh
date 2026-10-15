@@ -19,6 +19,7 @@ WIRING="${RCC_WIRING:-$HERE/blas-wiring.sh}"
 [ -x "$RBIN" ] || { echo "assert-r-blas.sh: no R at $RBIN" >&2; exit 1; }
 
 want="$(sh "$WIRING" expect "$FLAVOUR")"
+want_lapack="$(sh "$WIRING" expect-lapack "$FLAVOUR")"
 
 # La_library() gives the LAPACK and extSoftVersion()[["BLAS"]] the BLAS.
 # Symlinks are resolved in R, so the comparison uses what R opened.
@@ -55,6 +56,22 @@ else
         echo "   Most likely the alternatives were switched after the build, or" >&2
         echo "   configure could not link the external BLAS and silently fell" >&2
         echo "   back to R's internal one.  Check the BLAS section of config.log." >&2
+        exit 1
+        ;;
+    esac
+fi
+
+# configure also falls back to R's own LAPACK when -llapack does not link.
+if [ -n "$want_lapack" ]; then
+    case "$lapack" in
+    *"$want_lapack"*)
+        echo "  ok: LAPACK matches expected fragment '$want_lapack'"
+        ;;
+    *)
+        echo "" >&2
+        echo "** ERROR: $FLAVOUR is not using the LAPACK it claims." >&2
+        echo "   expected a path containing: $want_lapack" >&2
+        echo "   R is actually using:        $lapack" >&2
         exit 1
         ;;
     esac
