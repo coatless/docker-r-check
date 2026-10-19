@@ -126,7 +126,8 @@ USER rbuild
 
 ## Only the sanitizer arms read this. CRAN's sanitizer checks switch leak
 ## detection off, and it needs ptrace, which a container does not allow.
-ENV ASAN_OPTIONS=detect_leaks=0
+ARG RCC_ASAN_OPTIONS=detect_leaks=0
+ENV ASAN_OPTIONS=${RCC_ASAN_OPTIONS}
 
 ## NO_UPDATE=1 keeps the entrypoint from updating the pinned sources.
 RUN set -eu; \
