@@ -207,9 +207,9 @@ at CRAN on a web request shows as not reproduced when the request works here.
 <!-- daily results, rewritten by the evaluate workflow: start -->
 Every day the publish workflow rebuilds the arms, and the evaluate workflow
 repeats this comparison in the new images for CRAN's OpenBLAS, MKL, BLIS and
-clang23 lists and rewrites this section. The [run of 2026-10-17][daily-run]
-used R-devel r90695 on Debian testing, the CRAN snapshot of 2026-10-16 and
-CRAN's lists as of 2026-10-17 21:52 GMT.
+clang23 lists and rewrites this section. The [run of 2026-10-18][daily-run]
+used R-devel r90704 on Debian testing, the CRAN snapshot of 2026-10-17 and
+CRAN's lists as of 2026-10-18 21:50 GMT.
 
 | CRAN's list | Package | CRAN's result | Result here |
 |---|---|---|---|
@@ -239,19 +239,9 @@ A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
 BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
-These entries changed since the run of 2026-10-16.
+Nothing has changed since the run of 2026-10-17.
 
-- `WpProj` on the BLIS list went from "reproduced" to "reproduced, all of it
-  also in reference" in `blis-fedora-haswell`, `blis-fedora-zen3`,
-  `blis-haswell` and `blis-zen3`.
-- `postshock` on the MKL list went from "reproduced" to "not reproduced".
-- `ausOpenData` left the OpenBLAS list.
-- `htrSPRanalysis` left the OpenBLAS list.
-- `netrics` left the OpenBLAS list.
-- `rpanel` left the OpenBLAS list.
-- `stm` left the OpenBLAS list.
-
-[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/39073228567
+[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/39170382800
 <!-- daily results: end -->
 
 ### Every list, 2026-10-04 to 2026-10-07

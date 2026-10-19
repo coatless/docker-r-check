@@ -1,4 +1,4 @@
-# run of 2026-10-17
+# run of 2026-10-18
 kind	package	version	job	cran	verdict
 BLIS	BFS	0.7.2	blis-fedora-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	BFS	0.7.2	blis-fedora-skx	tests testthat.R: ERROR	not reproduced
