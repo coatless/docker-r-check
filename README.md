@@ -207,44 +207,50 @@ at CRAN on a web request shows as not reproduced when the request works here.
 <!-- daily results, rewritten by the evaluate workflow: start -->
 Every day the publish workflow rebuilds the arms, and the evaluate workflow
 repeats this comparison in the new images for CRAN's OpenBLAS, MKL, BLIS and
-clang23 lists and rewrites this section. The [run of 2026-10-19][daily-run]
-used R-devel r90719 on Debian testing, the CRAN snapshot of 2026-10-18 and
-CRAN's lists as of 2026-10-19 22:50 GMT.
+clang23 lists and rewrites this section. The [run of 2026-10-20][daily-run]
+used R-devel r90728 on Debian testing, the CRAN snapshot of 2026-10-19 and
+CRAN's lists as of 2026-10-20 22:54 GMT.
 
 | CRAN's list | Package | CRAN's result | Result here |
 |---|---|---|---|
+| OpenBLAS | `brfinance` 0.9.0 | re-building of vignette outputs: ERROR | not reproduced |
 | OpenBLAS | `ButtR` 1.1.1 | tests testthat.R: ERROR | not reproduced |
 | OpenBLAS | `gap` 1.15.2 | dependencies in R code: NOTE; re-building of vignette outputs: ERROR | partly reproduced, all of it also in reference |
 | OpenBLAS | `iTensor` 1.0.6 | tests testthat.R: ERROR | not reproduced |
 | OpenBLAS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced |
-| MKL | `fastPLS` 0.3 | tests testthat.R: ERROR | reproduced |
+| MKL | `brfinance` 0.9.0 | re-building of vignette outputs: ERROR | not reproduced |
 | MKL | `postshock` 0.2.1 | tests testthat.R: ERROR | not reproduced |
 | MKL | `spinebil` 1.0.5 | re-building of vignette outputs: ERROR | not reproduced |
-| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`, `blis-skx`) |
-| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-skx`, `blis-zen3`) |
-| BLIS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-skx`, `blis-zen3`) |
+| BLIS | `brfinance` 0.9.0 | re-building of vignette outputs: ERROR | not reproduced |
+| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`) |
+| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-zen3`) |
+| BLIS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-zen3`) |
 | BLIS | `rpanel` 1.1-6.3 | tests testthat.R: ERROR | not reproduced |
 | BLIS | `spatPomp` 1.1.0 | tests bm.Rout: NOTE; tests measles.Rout: NOTE | partly reproduced, all of it also in reference |
-| BLIS | `vaccineff` 1.0.3 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-skx`, `blis-zen3`) |
-| BLIS | `WpProj` 0.3 | tests testthat.R: ERROR | reproduced, all of it also in reference |
+| BLIS | `vaccineff` 1.0.3 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-zen3`) |
 | clang23 | `timesift` 0.3.1 | whether package can be installed: ERROR | reproduced |
 
-The MKL checks ran on an AMD EPYC 9V45. MKL runs its AVX2 and AVX-512 code
+The MKL checks ran on an AMD EPYC 9V74. MKL runs its AVX2 and AVX-512 code
 only on Intel CPUs, so an MKL result can change with the runner.
 
 A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
 BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
-These entries changed since the run of 2026-10-18.
+Not every image is from that build. `atlas` has R-devel r90719, built on
+2026-10-19.
 
-- `iTensor` joined the OpenBLAS list.
-- `BFS` left the BLIS list.
-- `scNPM` left the BLIS list.
-- `RecAssoRules` left the clang23 list.
-- `scNPM` left the MKL list.
+No results came from `blis-skx` this time.
 
-[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/39342822812
+These entries changed since the run of 2026-10-19.
+
+- `brfinance` joined the BLIS list.
+- `brfinance` joined the MKL list.
+- `brfinance` joined the OpenBLAS list.
+- `WpProj` left the BLIS list.
+- `fastPLS` left the MKL list.
+
+[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/39511640065
 <!-- daily results: end -->
 
 ### Every list, 2026-10-04 to 2026-10-07
