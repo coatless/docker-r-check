@@ -1,4 +1,4 @@
-# run of 2026-10-20
+# run of 2026-10-21
 kind	package	version	job	cran	verdict
 BLIS	brfinance	0.9.0	blis-fedora-haswell	re-building of vignette outputs: ERROR	not reproduced
 BLIS	brfinance	0.9.0	blis-fedora-skx	re-building of vignette outputs: ERROR	not reproduced
@@ -24,24 +24,18 @@ BLIS	postshock	0.2.1	blis-fedora-zen3	tests testthat.R: ERROR	reproduced
 BLIS	postshock	0.2.1	blis-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	postshock	0.2.1	blis-skx	tests testthat.R: ERROR	not checked
 BLIS	postshock	0.2.1	blis-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-fedora-haswell	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-fedora-skx	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-fedora-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-haswell	tests testthat.R: ERROR	not reproduced
+BLIS	rpanel	1.1-6.3	blis-fedora-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-fedora-skx	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-fedora-zen3	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
 BLIS	rpanel	1.1-6.3	blis-skx	tests testthat.R: ERROR	not checked
-BLIS	rpanel	1.1-6.3	blis-zen3	tests testthat.R: ERROR	not reproduced
+BLIS	rpanel	1.1-6.3	blis-zen3	tests testthat.R: ERROR	reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-fedora-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-fedora-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-fedora-zen3	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	not checked
 BLIS	spatPomp	1.1.0	blis-zen3	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	vaccineff	1.0.3	blis-fedora-haswell	tests testthat.R: ERROR	reproduced
-BLIS	vaccineff	1.0.3	blis-fedora-skx	tests testthat.R: ERROR	reproduced
-BLIS	vaccineff	1.0.3	blis-fedora-zen3	tests testthat.R: ERROR	reproduced
-BLIS	vaccineff	1.0.3	blis-haswell	tests testthat.R: ERROR	not reproduced
-BLIS	vaccineff	1.0.3	blis-skx	tests testthat.R: ERROR	not checked
-BLIS	vaccineff	1.0.3	blis-zen3	tests testthat.R: ERROR	not reproduced
 clang23	timesift	0.3.1	clang23	whether package can be installed: ERROR	reproduced
 MKL	brfinance	0.9.0	mkl	re-building of vignette outputs: ERROR	not reproduced
 MKL	postshock	0.2.1	mkl	tests testthat.R: ERROR	not reproduced
