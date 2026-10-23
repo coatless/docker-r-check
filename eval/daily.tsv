@@ -1,37 +1,37 @@
-# run of 2026-10-21
+# run of 2026-10-22
 kind	package	version	job	cran	verdict
 BLIS	brfinance	0.9.0	blis-fedora-haswell	re-building of vignette outputs: ERROR	not reproduced
-BLIS	brfinance	0.9.0	blis-fedora-skx	re-building of vignette outputs: ERROR	not reproduced
+BLIS	brfinance	0.9.0	blis-fedora-skx	re-building of vignette outputs: ERROR	not checked
 BLIS	brfinance	0.9.0	blis-fedora-zen3	re-building of vignette outputs: ERROR	not reproduced
 BLIS	brfinance	0.9.0	blis-haswell	re-building of vignette outputs: ERROR	not reproduced
 BLIS	brfinance	0.9.0	blis-skx	re-building of vignette outputs: ERROR	not checked
 BLIS	brfinance	0.9.0	blis-zen3	re-building of vignette outputs: ERROR	not reproduced
-BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
-BLIS	ISwR	2.0-12	blis-fedora-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
-BLIS	ISwR	2.0-12	blis-fedora-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
-BLIS	ISwR	2.0-12	blis-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	partly reproduced, all of it also in reference
+BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	different problem, all of it also in reference
+BLIS	ISwR	2.0-12	blis-fedora-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	not checked
+BLIS	ISwR	2.0-12	blis-fedora-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	different problem, all of it also in reference
+BLIS	ISwR	2.0-12	blis-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	different problem, all of it also in reference
 BLIS	ISwR	2.0-12	blis-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	not checked
-BLIS	ISwR	2.0-12	blis-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
+BLIS	ISwR	2.0-12	blis-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	different problem, all of it also in reference
 BLIS	micEconDistRay	0.1-4	blis-fedora-haswell	tests appleProdFr86_test.Rout: NOTE	reproduced
-BLIS	micEconDistRay	0.1-4	blis-fedora-skx	tests appleProdFr86_test.Rout: NOTE	reproduced
+BLIS	micEconDistRay	0.1-4	blis-fedora-skx	tests appleProdFr86_test.Rout: NOTE	not checked
 BLIS	micEconDistRay	0.1-4	blis-fedora-zen3	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	micEconDistRay	0.1-4	blis-haswell	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	micEconDistRay	0.1-4	blis-skx	tests appleProdFr86_test.Rout: NOTE	not checked
 BLIS	micEconDistRay	0.1-4	blis-zen3	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	postshock	0.2.1	blis-fedora-haswell	tests testthat.R: ERROR	reproduced
-BLIS	postshock	0.2.1	blis-fedora-skx	tests testthat.R: ERROR	reproduced
+BLIS	postshock	0.2.1	blis-fedora-skx	tests testthat.R: ERROR	not checked
 BLIS	postshock	0.2.1	blis-fedora-zen3	tests testthat.R: ERROR	reproduced
 BLIS	postshock	0.2.1	blis-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	postshock	0.2.1	blis-skx	tests testthat.R: ERROR	not checked
 BLIS	postshock	0.2.1	blis-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-fedora-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
-BLIS	rpanel	1.1-6.3	blis-fedora-skx	tests testthat.R: ERROR	reproduced, all of it also in reference
-BLIS	rpanel	1.1-6.3	blis-fedora-zen3	tests testthat.R: ERROR	reproduced, all of it also in reference
-BLIS	rpanel	1.1-6.3	blis-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-fedora-haswell	tests testthat.R: ERROR	not reproduced
+BLIS	rpanel	1.1-6.3	blis-fedora-skx	tests testthat.R: ERROR	not checked
+BLIS	rpanel	1.1-6.3	blis-fedora-zen3	tests testthat.R: ERROR	not reproduced
+BLIS	rpanel	1.1-6.3	blis-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	rpanel	1.1-6.3	blis-skx	tests testthat.R: ERROR	not checked
-BLIS	rpanel	1.1-6.3	blis-zen3	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-zen3	tests testthat.R: ERROR	not reproduced
 BLIS	spatPomp	1.1.0	blis-fedora-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	spatPomp	1.1.0	blis-fedora-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
+BLIS	spatPomp	1.1.0	blis-fedora-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	not checked
 BLIS	spatPomp	1.1.0	blis-fedora-zen3	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
 BLIS	spatPomp	1.1.0	blis-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	not checked
