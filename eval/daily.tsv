@@ -1,11 +1,5 @@
-# run of 2026-10-23
+# run of 2026-10-24
 kind	package	version	job	cran	verdict
-BLIS	brfinance	0.9.0	blis-fedora-haswell	re-building of vignette outputs: ERROR	not reproduced
-BLIS	brfinance	0.9.0	blis-fedora-skx	re-building of vignette outputs: ERROR	not reproduced
-BLIS	brfinance	0.9.0	blis-fedora-zen3	re-building of vignette outputs: ERROR	not reproduced
-BLIS	brfinance	0.9.0	blis-haswell	re-building of vignette outputs: ERROR	not reproduced
-BLIS	brfinance	0.9.0	blis-skx	re-building of vignette outputs: ERROR	not reproduced
-BLIS	brfinance	0.9.0	blis-zen3	re-building of vignette outputs: ERROR	not reproduced
 BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	ISwR	2.0-12	blis-fedora-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	ISwR	2.0-12	blis-fedora-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
@@ -24,30 +18,35 @@ BLIS	postshock	0.2.1	blis-fedora-zen3	tests testthat.R: ERROR	reproduced
 BLIS	postshock	0.2.1	blis-haswell	tests testthat.R: ERROR	not reproduced
 BLIS	postshock	0.2.1	blis-skx	tests testthat.R: ERROR	not reproduced
 BLIS	postshock	0.2.1	blis-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	PSAboot	1.3.9	blis-fedora-haswell	re-building of vignette outputs: ERROR	not reproduced
-BLIS	PSAboot	1.3.9	blis-fedora-skx	re-building of vignette outputs: ERROR	reproduced
+BLIS	PSAboot	1.3.9	blis-fedora-haswell	re-building of vignette outputs: ERROR	reproduced
+BLIS	PSAboot	1.3.9	blis-fedora-skx	re-building of vignette outputs: ERROR	not reproduced
 BLIS	PSAboot	1.3.9	blis-fedora-zen3	re-building of vignette outputs: ERROR	not reproduced
-BLIS	PSAboot	1.3.9	blis-haswell	re-building of vignette outputs: ERROR	not reproduced
-BLIS	PSAboot	1.3.9	blis-skx	re-building of vignette outputs: ERROR	reproduced
-BLIS	PSAboot	1.3.9	blis-zen3	re-building of vignette outputs: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-fedora-haswell	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-fedora-skx	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-fedora-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-haswell	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-skx	tests testthat.R: ERROR	not reproduced
-BLIS	rpanel	1.1-6.3	blis-zen3	tests testthat.R: ERROR	not reproduced
-BLIS	spatPomp	1.1.0	blis-fedora-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	spatPomp	1.1.0	blis-fedora-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	spatPomp	1.1.0	blis-fedora-zen3	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	spatPomp	1.1.0	blis-haswell	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	spatPomp	1.1.0	blis-skx	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
-BLIS	spatPomp	1.1.0	blis-zen3	tests bm.Rout: NOTE; tests measles.Rout: NOTE	partly reproduced, all of it also in reference
+BLIS	PSAboot	1.3.9	blis-haswell	re-building of vignette outputs: ERROR	reproduced
+BLIS	PSAboot	1.3.9	blis-skx	re-building of vignette outputs: ERROR	not reproduced
+BLIS	PSAboot	1.3.9	blis-zen3	re-building of vignette outputs: ERROR	reproduced
+BLIS	readmit	0.0.1	blis-fedora-haswell	examples: ERROR; tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	readmit	0.0.1	blis-fedora-skx	examples: ERROR; tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	readmit	0.0.1	blis-fedora-zen3	examples: ERROR; tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	readmit	0.0.1	blis-haswell	examples: ERROR; tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	readmit	0.0.1	blis-skx	examples: ERROR; tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	readmit	0.0.1	blis-zen3	examples: ERROR; tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-fedora-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-fedora-skx	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-fedora-zen3	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-haswell	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-skx	tests testthat.R: ERROR	reproduced, all of it also in reference
+BLIS	rpanel	1.1-6.3	blis-zen3	tests testthat.R: ERROR	reproduced, all of it also in reference
 clang23	timesift	0.3.1	clang23	whether package can be installed: ERROR	reproduced
 MKL	brfinance	0.9.0	mkl	re-building of vignette outputs: ERROR	not reproduced
 MKL	postshock	0.2.1	mkl	tests testthat.R: ERROR	not reproduced
+MKL	sommer	4.5.11	mkl	re-building of vignette outputs: ERROR	not reproduced
 MKL	spinebil	1.0.5	mkl	re-building of vignette outputs: ERROR	not reproduced
 MKL	streamConnect	0.1.0	mkl	examples: ERROR; re-building of vignette outputs: ERROR	not reproduced
+MKL	wikkitidy	0.1.14	mkl	examples: ERROR	not reproduced
 OpenBLAS	brfinance	0.9.0	openblas	re-building of vignette outputs: ERROR	not reproduced
 OpenBLAS	gap	1.15.2	openblas	dependencies in R code: NOTE; re-building of vignette outputs: ERROR	partly reproduced, all of it also in reference
 OpenBLAS	iTensor	1.0.6	openblas	tests testthat.R: ERROR	not reproduced
 OpenBLAS	postshock	0.2.1	openblas	tests testthat.R: ERROR	reproduced
+OpenBLAS	sommer	4.5.11	openblas	re-building of vignette outputs: ERROR	different problem
+OpenBLAS	streamConnect	0.1.0	openblas	examples: ERROR; re-building of vignette outputs: ERROR	not reproduced
+OpenBLAS	wikkitidy	0.1.14	openblas	examples: ERROR	not reproduced
