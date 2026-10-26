@@ -207,9 +207,9 @@ at CRAN on a web request shows as not reproduced when the request works here.
 <!-- daily results, rewritten by the evaluate workflow: start -->
 Every day the publish workflow rebuilds the arms, and the evaluate workflow
 repeats this comparison in the new images for CRAN's OpenBLAS, MKL, BLIS and
-clang23 lists and rewrites this section. The [run of 2026-10-24][daily-run]
-used R-devel r90760 on Debian testing, the CRAN snapshot of 2026-10-23 and
-CRAN's lists as of 2026-10-24 21:50 GMT.
+clang23 lists and rewrites this section. The [run of 2026-10-25][daily-run]
+used R-devel r90763 on Debian testing, the CRAN snapshot of 2026-10-24 and
+CRAN's lists as of 2026-10-25 21:52 GMT.
 
 | CRAN's list | Package | CRAN's result | Result here |
 |---|---|---|---|
@@ -217,49 +217,40 @@ CRAN's lists as of 2026-10-24 21:50 GMT.
 | OpenBLAS | `gap` 1.15.2 | dependencies in R code: NOTE; re-building of vignette outputs: ERROR | partly reproduced, all of it also in reference |
 | OpenBLAS | `iTensor` 1.0.6 | tests testthat.R: ERROR | not reproduced |
 | OpenBLAS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced |
-| OpenBLAS | `sommer` 4.5.11 | re-building of vignette outputs: ERROR | different problem |
-| OpenBLAS | `streamConnect` 0.1.0 | examples: ERROR; re-building of vignette outputs: ERROR | not reproduced |
 | OpenBLAS | `wikkitidy` 0.1.14 | examples: ERROR | not reproduced |
 | MKL | `brfinance` 0.9.0 | re-building of vignette outputs: ERROR | not reproduced |
 | MKL | `postshock` 0.2.1 | tests testthat.R: ERROR | not reproduced |
-| MKL | `sommer` 4.5.11 | re-building of vignette outputs: ERROR | not reproduced |
 | MKL | `spinebil` 1.0.5 | re-building of vignette outputs: ERROR | not reproduced |
-| MKL | `streamConnect` 0.1.0 | examples: ERROR; re-building of vignette outputs: ERROR | not reproduced |
 | MKL | `wikkitidy` 0.1.14 | examples: ERROR | not reproduced |
-| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`, `blis-skx`) |
-| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-skx`, `blis-zen3`) |
-| BLIS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-skx`, `blis-zen3`) |
-| BLIS | `PSAboot` 1.3.9 | re-building of vignette outputs: ERROR | reproduced (`blis-fedora-haswell`, `blis-haswell`, `blis-zen3`)<br>not reproduced (`blis-fedora-skx`, `blis-fedora-zen3`, `blis-skx`) |
+| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`, `blis-skx`) |
+| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-skx`, `blis-zen3`) |
+| BLIS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-skx`, `blis-zen3`) |
+| BLIS | `PSAboot` 1.3.9 | re-building of vignette outputs: ERROR | reproduced (`blis-skx`)<br>not reproduced (`blis-fedora-haswell`, `blis-fedora-zen3`, `blis-haswell`, `blis-zen3`) |
 | BLIS | `readmit` 0.0.1 | examples: ERROR; tests testthat.R: ERROR | reproduced, all of it also in reference |
 | BLIS | `rpanel` 1.1-6.3 | tests testthat.R: ERROR | reproduced, all of it also in reference |
 | clang23 | `timesift` 0.3.1 | whether package can be installed: ERROR | reproduced |
 
-The MKL checks ran on an AMD EPYC 9V45. MKL runs its AVX2 and AVX-512 code
+The MKL checks ran on an AMD EPYC 7763. MKL runs its AVX2 and AVX-512 code
 only on Intel CPUs, so an MKL result can change with the runner.
 
 A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
 BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
-These entries changed since the run of 2026-10-23.
+No results came from `blis-fedora-skx` this time.
 
-- `PSAboot` on the BLIS list went from "not reproduced" to "reproduced" in
-  `blis-fedora-haswell`, `blis-haswell` and `blis-zen3`.
+These entries changed since the run of 2026-10-24.
+
 - `PSAboot` on the BLIS list went from "reproduced" to "not reproduced" in
-  `blis-fedora-skx` and `blis-skx`.
-- `readmit` joined the BLIS list.
-- `rpanel` on the BLIS list went from "not reproduced" to "reproduced, all of
-  it also in reference" in `blis-fedora-haswell`, `blis-fedora-skx`,
-  `blis-fedora-zen3`, `blis-haswell`, `blis-skx` and `blis-zen3`.
-- `sommer` joined the MKL list.
-- `wikkitidy` joined the MKL list.
-- `sommer` joined the OpenBLAS list.
-- `streamConnect` joined the OpenBLAS list.
-- `wikkitidy` joined the OpenBLAS list.
-- `brfinance` left the BLIS list.
-- `spatPomp` left the BLIS list.
+  `blis-fedora-haswell`, `blis-haswell` and `blis-zen3`.
+- `PSAboot` on the BLIS list went from "not reproduced" to "reproduced" in
+  `blis-skx`.
+- `sommer` left the MKL list.
+- `streamConnect` left the MKL list.
+- `sommer` left the OpenBLAS list.
+- `streamConnect` left the OpenBLAS list.
 
-[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/40137856498
+[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/40240341931
 <!-- daily results: end -->
 
 ### Every list, 2026-10-04 to 2026-10-07
