@@ -26,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       arms:
-        description: Arms to publish, as a list such as "openblas mkl". Empty publishes every arm.
+        description: Arms to publish, as a list such as "openblas mkl". Empty publishes every arm that is not turned off.
       suite:
         description: Debian suite to build on
         type: choice
@@ -93,17 +93,22 @@ jobs:
         id: arms
         env:
           IN_ARMS: ${{ inputs.arms }}
+          # Arms built only when asked for by name. CRAN's regular ATLAS
+          # checks have stopped, so atlas has nothing to be compared with.
+          OFF_ARMS: atlas
         run: |
-          # Every arm that builds on this suite, or the ones asked for. The
-          # base is built when one of them is for x86.
+          # Every arm that builds on this suite and is not turned off, or the
+          # ones asked for. The base is built when one of them is for x86.
           arms=""
           base=false
+          wanted=" ${IN_ARMS//[^a-z0-9]/ } "
           for f in docker/flavours/*.env; do
             arm=$(basename "$f" .env)
             # shellcheck disable=SC1090 # the arm file names its suites
             suites=$(. "$f" && echo "${RCC_SUITES:-testing stable}")
             case " $suites " in *" $SUITE "*) ;; *) echo "$arm does not build on $SUITE"; continue ;; esac
-            case " ${IN_ARMS//[^a-z0-9]/ } " in "  "|*" $arm "*) ;; *) continue ;; esac
+            case "$wanted" in "  "|*" $arm "*) ;; *) continue ;; esac
+            case "$wanted: $OFF_ARMS " in "  :"*" $arm "*) echo "$arm is turned off"; continue ;; esac
             arms="$arms $arm"
             # shellcheck disable=SC1090
             [ "$(. "$f" && echo "$RCC_ARCH")" != amd64 ] || base=true

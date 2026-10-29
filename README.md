@@ -6,8 +6,8 @@ donttest checks, on x86 and on arm64.
 
 Each image is called an *arm*. An arm is R-devel built with `build-R` and
 `Rconf` from the [CRAN QA tree][qa-tree], on Debian testing with the system
-libraries of AASC's [`rcheckserver`][aasc]. Every arm is rebuilt from scratch
-each day and published. An arm differs from the `reference` arm in the BLAS,
+libraries of AASC's [`rcheckserver`][aasc]. Every arm but `atlas` is rebuilt
+from scratch each day and published. An arm differs from the `reference` arm in the BLAS,
 the compilers, a configure option or the CPU architecture, so a difference in
 a check result can be traced to that change.
 
@@ -61,13 +61,14 @@ flowchart BT
     build --> arm64
 ```
 
-There are thirteen arms. Each one changes a single thing against `reference`.
+There are thirteen arms, and twelve of them are built each day. Each one
+changes a single thing against `reference`.
 
 | Arm | What it changes | Passed to `Rconf` |
 |---|---|---|
 | `reference` | Nothing. R's own BLAS and LAPACK, Debian's GCC. | `-bi` |
 | `openblas` | Serial OpenBLAS 0.3.29, with its LAPACK | `-bo` |
-| `atlas` | ATLAS 3.10.3, with its LAPACK 3.11.0 | `--with-blas=-lblas --with-lapack=-llapack` |
+| `atlas` | ATLAS 3.10.3, with its LAPACK 3.11.0. Not built each day. | `--with-blas=-lblas --with-lapack=-llapack` |
 | `mkl` | Serial Intel MKL 2026.1, BLAS and LAPACK | `-bm` |
 | `blis` | Serial BLIS 2.1, with Debian's LAPACK 3.12.1 | `--with-blas=-lblas --with-lapack=-llapack` |
 | `blisfedora` | The BLIS and LAPACK binaries from Fedora's `blis-2.0-5` and `lapack-3.12.0-11` packages, the ones CRAN uses | `--with-blas=-lblas --with-lapack=-llapack` |
@@ -88,7 +89,9 @@ files.
 
 CRAN's [list of issue kinds][issue-kinds] changes often. Regular ATLAS runs
 stopped on 2026-09-01, according to the [notes on the BLAS checks][rblas],
-and BLIS joined the list. You can fetch the current list in R.
+and BLIS joined the list. So the daily build leaves `atlas` out. Naming it in
+the publish workflow's `arms` input still builds and publishes it. You can
+fetch the current list in R.
 
 ```r
 x <- readRDS(url("https://cran.r-project.org/web/checks/check_issues.rds"))

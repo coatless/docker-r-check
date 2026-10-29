@@ -221,7 +221,7 @@ jobs:
           # Lists that run in an image someone else publishes, not in an arm.
           published = []
           # Arms with nothing on CRAN's list today still check the other packages.
-          for arm in ("openblas", "mkl", "atlas"):
+          for arm in ("openblas", "mkl"):
               count.setdefault(arm, 0)
           for arm in sorted(count):
               # A long list is split over several jobs of about 10 packages.

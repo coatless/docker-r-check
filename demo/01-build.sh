@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the self-contained ('standalone') check image for one or more arms.
 #
-#   demo/01-build.sh reference openblas atlas
+#   demo/01-build.sh reference openblas blis
 #
 # Each arm is tagged rcc-standalone:<flavour>.  The base layers (Debian,
 # rcheckserver, R and QA sources) are shared, so the first arm is slow and

@@ -2,7 +2,7 @@
 # Check the same packages in several arms and compare the results.
 #
 #   demo/04-compare.sh "reference openblas" digest
-#   demo/04-compare.sh "reference openblas atlas" path/to/pkg_1.0.tar.gz
+#   demo/04-compare.sh "reference openblas blis" path/to/pkg_1.0.tar.gz
 #
 # The first arm is the baseline. Every other arm's 00check.log is diffed
 # against it after timings are removed. Uses demo/03-check.sh, so the per-arm
