@@ -210,48 +210,55 @@ at CRAN on a web request shows as not reproduced when the request works here.
 <!-- daily results, rewritten by the evaluate workflow: start -->
 Every day the publish workflow rebuilds the arms, and the evaluate workflow
 repeats this comparison in the new images for CRAN's OpenBLAS, MKL, BLIS and
-clang23 lists and rewrites this section. The [run of 2026-10-28][daily-run]
-used R-devel r90783 on Debian testing, the CRAN snapshot of 2026-10-27 and
-CRAN's lists as of 2026-10-28 22:59 GMT.
+clang23 lists and rewrites this section. The [run of 2026-10-30][daily-run]
+used R-devel r90794 on Debian testing, the CRAN snapshot of 2026-10-29 and
+CRAN's lists as of 2026-10-29 23:56 GMT.
 
 | CRAN's list | Package | CRAN's result | Result here |
 |---|---|---|---|
 | OpenBLAS | `brfinance` 0.9.0 | re-building of vignette outputs: ERROR | not reproduced |
 | OpenBLAS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced |
+| OpenBLAS | `streamConnect` 0.1.1 | examples: ERROR | not reproduced |
 | OpenBLAS | `wikkitidy` 0.1.14 | examples: ERROR | not reproduced |
-| MKL | `brfinance` 0.9.0 | re-building of vignette outputs: ERROR | not reproduced |
-| MKL | `INLAvaan` 0.3.3 | tests testthat.R: ERROR | not reproduced |
-| MKL | `postshock` 0.2.1 | tests testthat.R: ERROR | not reproduced |
-| MKL | `wikkitidy` 0.1.14 | examples: ERROR | not reproduced |
-| MKL | `wsMed` 1.2.0 | tests testthat.R: ERROR | not reproduced |
-| BLIS | `INLAvaan` 0.3.3 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-zen3`) |
-| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`) |
-| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-zen3`) |
-| BLIS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-zen3`) |
+| MKL | 43 packages | | 1 reproduced, 2 partly reproduced, 2 different problem, 30 not reproduced, 8 check did not finish |
+| BLIS | `INLAvaan` 0.3.3 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-zen3`) |
+| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`) |
+| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-zen3`) |
+| BLIS | `postshock` 0.2.1 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-zen3`) |
 | BLIS | `PSAboot` 1.3.9 | re-building of vignette outputs: ERROR | not reproduced |
+| BLIS | `streamConnect` 0.1.1 | examples: ERROR | not reproduced |
 | clang23 | none listed | | |
 
-The MKL checks ran on an AMD EPYC 7763. MKL runs its AVX2 and AVX-512 code
-only on Intel CPUs, so an MKL result can change with the runner.
+The MKL checks ran on an AMD EPYC 7763, except `asympDiag`, `bootImpute`,
+`climatehealth`, `FDboost`, `MatchIt`, `PAMpal`, `RAS`, `SimtablR` and
+`wikkitidy` on an AMD EPYC 9V45 and `betaregscale`, `BRETIGEA`, `cpr`,
+`IsingSampler`, `MetaHD`, `POEMED`, `RDHonest` and `SynthesizerPlus` on an AMD
+EPYC 9V74. MKL runs its AVX2 and AVX-512 code only on Intel CPUs, so an MKL
+result can change with the runner.
 
 A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
 BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
-No results came from `blis-skx` this time.
+No results came from `blis-fedora-skx` and `blis-skx` this time.
 
-These entries changed since the run of 2026-10-27.
+These entries changed since the run of 2026-10-28.
 
-- `PSAboot` on the BLIS list went from "reproduced" to "not reproduced" in
-  `blis-fedora-haswell`.
-- `wikkitidy` on the MKL list went from "partly reproduced" to "not
-  reproduced".
-- `wsMed` joined the MKL list.
-- `wikkitidy` on the OpenBLAS list went from "partly reproduced" to "not
-  reproduced".
-- `spinebil` left the MKL list.
+- `streamConnect` joined the BLIS list.
+- `ackwards` joined the MKL list.
+- `asympDiag` joined the MKL list.
+- `BET` joined the MKL list.
+- `betaregscale` joined the MKL list.
+- `betaselectr` joined the MKL list.
+- `BIOdry` joined the MKL list.
+- `bootImpute` joined the MKL list.
+- `BootstrapTests` joined the MKL list.
+- `BRETIGEA` joined the MKL list.
+- `CIMEHR` joined the MKL list.
+- `climatehealth` joined the MKL list.
+- 28 more are in the run's report.
 
-[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/40790050954
+[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/40977094800
 <!-- daily results: end -->
 
 ### Every list, 2026-10-04 to 2026-10-07
