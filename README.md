@@ -210,71 +210,71 @@ at CRAN on a web request shows as not reproduced when the request works here.
 <!-- daily results, rewritten by the evaluate workflow: start -->
 Every day the publish workflow rebuilds the arms, and the evaluate workflow
 repeats this comparison in the new images for CRAN's OpenBLAS, MKL, BLIS and
-clang23 lists and rewrites this section. The [run of 2026-11-03][daily-run]
-used R-devel r90827 on Debian testing, the CRAN snapshot of 2026-11-02 and
-CRAN's lists as of 2026-11-03 01:53 GMT.
+clang23 lists and rewrites this section. The [run of 2026-11-04][daily-run]
+used R-devel r90835 on Debian testing, the CRAN snapshot of 2026-11-03 and
+CRAN's lists as of 2026-11-03 23:52 GMT.
 
 | CRAN's list | Package | CRAN's result | Result here |
 |---|---|---|---|
+| OpenBLAS | `adea` 1.5.2 | examples: ERROR; tests testthat.R: ERROR | not reproduced |
 | OpenBLAS | `brfinance` 0.9.0 | re-building of vignette outputs: ERROR | not reproduced |
-| OpenBLAS | `iTensor` 1.0.7 | tests testthat.R: ERROR | reproduced |
 | OpenBLAS | `mfrmr` 0.2.4 | tests testthat.R: ERROR | reproduced |
 | OpenBLAS | `PanelSelect` 2.0.0 | tests testthat.R: ERROR | reproduced |
 | OpenBLAS | `wikkitidy` 0.1.14 | examples: ERROR | not reproduced |
-| MKL | 133 packages | | 1 reproduced, 8 partly reproduced, 3 different problem, 92 not reproduced, 29 check did not finish |
-| BLIS | `INLAvaan` 0.3.3 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-skx`, `blis-zen3`) |
-| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`, `blis-skx`) |
-| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-skx`, `blis-zen3`) |
+| MKL | 136 packages | | 2 reproduced, 6 partly reproduced, 4 different problem, 75 not reproduced, 49 check did not finish |
+| BLIS | `adea` 1.5.2 | examples: ERROR; tests testthat.R: ERROR | not reproduced |
+| BLIS | `INLAvaan` 0.3.3 | tests testthat.R: ERROR | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`)<br>not reproduced (`blis-haswell`, `blis-zen3`) |
+| BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`) |
+| BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-zen3`) |
 | BLIS | `PanelSelect` 2.0.0 | tests testthat.R: ERROR | reproduced |
-| BLIS | `PSAboot` 1.3.9 | re-building of vignette outputs: ERROR | reproduced (`blis-fedora-haswell`)<br>not reproduced (`blis-fedora-skx`, `blis-fedora-zen3`, `blis-haswell`, `blis-skx`, `blis-zen3`) |
-| clang23 | none listed | | |
+| BLIS | `PSAboot` 1.3.9 | re-building of vignette outputs: ERROR | reproduced (`blis-haswell`)<br>not reproduced (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`) |
+| clang23 | `relm` 0.6.2 | whether package can be installed: ERROR | not reproduced |
 
-The MKL checks ran on an AMD EPYC 7763, except `ardlverse`, `betaselectr`,
-`BRETIGEA`, `circumplex`, `climatehealth`, `DImodels`, `Dyn4cast`, `fetwfe`,
-`fixest`, `forecast`, `gaussianprocesses`, `gestate`, `ggPMX`, `gsDesignNB`,
-`hcinfer`, `IsingSampler`, `LAGOtrials`, `lmeInfo`, `mashr`, `mboost`,
-`mfrmr`, `MRStdCRT`, `mverse`, `nonprobsvy`, `oalasso`, `PAMpal`, `pigauto`,
-`probably`, `PsychoMatic`, `pvars`, `rcicr`, `recipes`, `sampleSelection`,
-`scdhlm`, `scorecraft`, `semTests`, `SimtablR`, `ssel`, `stochvol`,
-`SuperLearner`, `termr`, `tmt`, `vasicekreg`, `vegan`, `vital`, `wdsmatch` and
-`wsMed` on an AMD EPYC 9V45, `asympDiag`, `BET`, `disaggR`, `drlate`,
-`genefindr`, `GeoModels`, `ivgets`, `ivreg2r`, `mice`, `mkin`, `PanelSelect`,
-`parameters`, `RCTCovAdj`, `RDHonest`, `Seurat`, `sfa`, `tern`, `tf`,
-`whatifbandit` and `wildmeta` on an AMD EPYC 9V74, `betaregscale`, `drmTMB`,
-`germinationmetrics`, `koma`, `mmibain`, `phylopred`, `rdlocrand`,
-`ShiftShareSE`, `tidymatrix` and `workflows` on an INTEL XEON PLATINUM 8573C
-and `bootImpute`, `fbardl`, `ggfacto`, `LDAcoop`, `multipleOutcomes`,
-`POEMED`, `rigr`, `spCF` and `trending` on an Intel Xeon Platinum 8370C. MKL
-runs its AVX2 and AVX-512 code only on Intel CPUs, so an MKL result can change
-with the runner.
+The MKL checks ran on an AMD EPYC 7763, except `betaselectr`, `bootImpute`,
+`BootstrapTests`, `Dyn4cast`, `fastphylosig`, `fbardl`, `germinationmetrics`,
+`gets`, `ggfacto`, `koma`, `lcc`, `LDAcoop`, `mkin`, `MRStdCRT`,
+`multipleITScontrol`, `parameters`, `pigauto`, `pkgdiff`, `RDHonest`,
+`recipes`, `rigr`, `ShiftShareSE`, `simulab`, `spCF`, `tf`, `tmt`, `tppcm`,
+`wildmeta`, `wsMed` and `zfit` on an AMD EPYC 9V74, `adea`, `asympDiag`,
+`cpr`, `disaggR`, `forestsearch`, `gaussianprocesses`, `hdrm`, `IsingSampler`,
+`metafrontier`, `mfp2`, `oalasso`, `OPSR`, `pvars`, `rbmi`, `semanticfa`,
+`semTests`, `surveycore`, `targeted`, `vital` and `WALS` on an AMD EPYC 9V45,
+`BET`, `betaregscale`, `drlate`, `drmTMB`, `genefindr`, `GeoModels`, `ivgets`,
+`ivreg2r`, `mfrmr`, `mice`, `PAMpal`, `PanelSelect`, `rcicr`, `RCTCovAdj`,
+`Seurat`, `sfa`, `termr`, `tern`, `wdsmatch` and `whatifbandit` on an Intel
+Xeon Platinum 8370C and `BJM`, `eDMA`, `gestate`, `LAGOtrials`, `mmibain`,
+`phylopred`, `rdlocrand`, `SimtablR`, `tidymatrix` and `workflows` on an Intel
+Xeon 6975P-C. MKL runs its AVX2 and AVX-512 code only on Intel CPUs, so an MKL
+result can change with the runner.
 
 A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
 BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
-These entries changed since the run of 2026-11-01.
+No results came from `blis-skx` this time.
 
-- `PSAboot` on the BLIS list went from "not reproduced" to "reproduced" in
-  `blis-fedora-haswell`.
+These entries changed since the run of 2026-11-03.
+
+- `adea` joined the BLIS list.
 - `PSAboot` on the BLIS list went from "reproduced" to "not reproduced" in
-  `blis-fedora-zen3` and `blis-haswell`.
-- `ardlverse` joined the MKL list.
-- `BJM` joined the MKL list.
-- `circumplex` joined the MKL list.
-- `forecast` on the MKL list went from "partly reproduced" to "partly
+  `blis-fedora-haswell`.
+- `PSAboot` on the BLIS list went from "not reproduced" to "reproduced" in
+  `blis-haswell`.
+- `relm` joined the clang23 list.
+- `adea` joined the MKL list.
+- `fastphylosig` joined the MKL list.
+- `ggplot2` on the MKL list went from "partly reproduced" to "partly
   reproduced, all of it also in reference".
-- `ggplot2` on the MKL list went from "partly reproduced, all of it also in
-  reference" to "partly reproduced".
-- `ggPMX` on the MKL list went from "different problem, all of it also in
+- `mfp2` joined the MKL list.
+- `scdhlm` on the MKL list went from "different problem, all of it also in
   reference" to "different problem".
-- `mboost` on the MKL list went from "reproduced, all of it also in reference"
-  to "reproduced".
-- `iTensor` joined the OpenBLAS list.
-- `mfrmr` joined the OpenBLAS list.
-- `PanelSelect` joined the OpenBLAS list.
-- 9 more are in the run's report.
+- `surveycore` joined the MKL list.
+- `zfit` on the MKL list went from "partly reproduced, all of it also in
+  reference" to "partly reproduced".
+- `adea` joined the OpenBLAS list.
+- 2 more are in the run's report.
 
-[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/41564639084
+[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/41748972076
 <!-- daily results: end -->
 
 ### Every list, 2026-10-04 to 2026-10-07
