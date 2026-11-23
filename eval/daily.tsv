@@ -1,4 +1,4 @@
-# run of 2026-11-22
+# run of 2026-11-23
 kind	package	version	job	cran	verdict
 BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	ISwR	2.0-12	blis-fedora-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
@@ -25,9 +25,9 @@ BLIS	netgwas	1.14.5	blis-haswell	R code for possible problems: NOTE; tests testt
 BLIS	netgwas	1.14.5	blis-skx	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
 BLIS	netgwas	1.14.5	blis-zen3	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
 BLIS	nycOpenData	0.2.3	blis-fedora-haswell	re-building of vignette outputs: ERROR	not reproduced
-BLIS	nycOpenData	0.2.3	blis-fedora-skx	re-building of vignette outputs: ERROR	not reproduced
-BLIS	nycOpenData	0.2.3	blis-fedora-zen3	re-building of vignette outputs: ERROR	not reproduced
-BLIS	nycOpenData	0.2.3	blis-haswell	re-building of vignette outputs: ERROR	not reproduced
+BLIS	nycOpenData	0.2.3	blis-fedora-skx	re-building of vignette outputs: ERROR	reproduced, all of it also in reference
+BLIS	nycOpenData	0.2.3	blis-fedora-zen3	re-building of vignette outputs: ERROR	reproduced, all of it also in reference
+BLIS	nycOpenData	0.2.3	blis-haswell	re-building of vignette outputs: ERROR	reproduced, all of it also in reference
 BLIS	nycOpenData	0.2.3	blis-skx	re-building of vignette outputs: ERROR	not reproduced
 BLIS	nycOpenData	0.2.3	blis-zen3	re-building of vignette outputs: ERROR	not reproduced
 BLIS	projpred	3.0.0	blis-fedora-haswell	tests testthat.R: ERROR	different problem

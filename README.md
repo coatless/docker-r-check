@@ -210,9 +210,9 @@ at CRAN on a web request shows as not reproduced when the request works here.
 <!-- daily results, rewritten by the evaluate workflow: start -->
 Every day the publish workflow rebuilds the arms, and the evaluate workflow
 repeats this comparison in the new images for CRAN's OpenBLAS, MKL, BLIS and
-clang23 lists and rewrites this section. The [run of 2026-11-22][daily-run]
-used R-devel r90959 on Debian testing, the CRAN snapshot of 2026-11-21 and
-CRAN's lists as of 2026-11-21 23:51 GMT.
+clang23 lists and rewrites this section. The [run of 2026-11-23][daily-run]
+used R-devel r90959 on Debian testing, the CRAN snapshot of 2026-11-22 and
+CRAN's lists as of 2026-11-23 00:51 GMT.
 
 | CRAN's list | Package | CRAN's result | Result here |
 |---|---|---|---|
@@ -224,51 +224,34 @@ CRAN's lists as of 2026-11-21 23:51 GMT.
 | BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-skx`, `blis-zen3`) |
 | BLIS | `MixStable` 0.1.0 | dependencies in R code: NOTE; tests test_ecf.R: ERROR | partly reproduced, all of it also in reference |
 | BLIS | `netgwas` 1.14.5 | R code for possible problems: NOTE; tests testthat.R: ERROR | partly reproduced, all of it also in reference |
-| BLIS | `nycOpenData` 0.2.3 | re-building of vignette outputs: ERROR | not reproduced |
+| BLIS | `nycOpenData` 0.2.3 | re-building of vignette outputs: ERROR | reproduced, all of it also in reference (`blis-fedora-skx`, `blis-fedora-zen3`, `blis-haswell`)<br>not reproduced (`blis-fedora-haswell`, `blis-skx`, `blis-zen3`) |
 | BLIS | `projpred` 3.0.0 | tests testthat.R: ERROR | different problem |
 | BLIS | `tsDyn` 11.0.6 | tests compare_tsDyn_vars.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-zen3`)<br>not reproduced (`blis-fedora-skx`, `blis-haswell`, `blis-skx`, `blis-zen3`) |
 | clang23 | none listed | | |
 
-The MKL checks ran on an Intel Xeon 6975P-C, except `ardlverse`, `asympDiag`,
-`clubSandwich`, `datawizard`, `DImodels`, `FDboost`, `fMRItools`, `fpc`,
-`gips`, `hcinfer`, `irtsim`, `lingamr`, `lmtp`, `manymome`, `miLAG`, `mlrCPO`,
-`MortalityLaws`, `nonprobsvy`, `ordered`, `parameters`, `proxymix`,
-`rdlocrand`, `regsensitivity`, `semanticfa`, `simhelpers`, `spCF`,
-`tidymatrix`, `uniml` and `vennabers` on an AMD EPYC 7763, `AIPW`,
-`betaselectr`, `dacc`, `drmTMB`, `fixest`, `genefindr`, `gsDesignNB`,
-`ivreg2r`, `lmmresample`, `mboost`, `mlr3learners`, `multipleOutcomes`,
-`olsrr`, `pigauto`, `RCTCovAdj`, `riskdiff`, `sfa`, `SuperLearner`, `tsissm`
-and `wdsmatch` on an AMD EPYC 9V45, `ackwards`, `clusterIV`, `ffmanova`,
-`gllvmTMB`, `list`, `mixvlmc`, `oalasso`, `psychonetrics`, `seminrExtras` and
-`tppcm` on an INTEL XEON PLATINUM 8573C and `cdid`, `fastphylosig`, `gets`,
-`koma`, `MFPCA`, `netgwas`, `probably`, `scan`, `targeted` and `workflows` on
-an Intel Xeon Platinum 8370C. MKL runs its AVX2 and AVX-512 code only on Intel
-CPUs, so an MKL result can change with the runner.
+The MKL checks ran on an Intel Xeon 6975P-C, except `ardlverse`,
+`betaselectr`, `clubSandwich`, `datawizard`, `drmTMB`, `FDboost`, `fMRItools`,
+`genefindr`, `gips`, `hcinfer`, `ivreg2r`, `lingamr`, `lmtp`, `mboost`,
+`miLAG`, `mlrCPO`, `multipleOutcomes`, `nonprobsvy`, `ordered`, `pigauto`,
+`proxymix`, `rdlocrand`, `riskdiff`, `semanticfa`, `simhelpers`,
+`SuperLearner`, `tidymatrix`, `uniml` and `wdsmatch` on an AMD EPYC 7763,
+`AIPW`, `dacc`, `fixest`, `gsDesignNB`, `lmmresample`, `mlr3learners`,
+`olsrr`, `RCTCovAdj`, `sfa` and `tsissm` on an AMD EPYC 9V74 and
+`climatehealth`, `FCUSUM`, `ggplot2`, `lcc`, `mice`, `nlme`, `Proximum`,
+`scorecraft` and `tf` on an AMD EPYC 9V45. MKL runs its AVX2 and AVX-512 code
+only on Intel CPUs, so an MKL result can change with the runner.
 
 A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
 BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
-These entries changed since the run of 2026-11-21.
+These entries changed since the run of 2026-11-22.
 
-- `nycOpenData` on the BLIS list went from "reproduced" to "not reproduced" in
-  `blis-haswell`, `blis-skx` and `blis-zen3`.
-- `projpred` joined the BLIS list.
-- `AIPW` joined the MKL list.
-- `arm` joined the MKL list.
-- `bases` joined the MKL list.
-- `clubSandwich` on the MKL list went from "same step, different result, part
-  of it also in reference" to "partly reproduced, all of it also in
-  reference".
-- `clusterIV` joined the MKL list.
-- `devRate` joined the MKL list.
-- `dynamac` joined the MKL list.
-- `FCUSUM` joined the MKL list.
-- `FDboost` on the MKL list went from "reproduced" to "not reproduced".
-- `fMRItools` joined the MKL list.
-- 40 more are in the run's report.
+- `nycOpenData` on the BLIS list went from "not reproduced" to "reproduced,
+  all of it also in reference" in `blis-fedora-skx`, `blis-fedora-zen3` and
+  `blis-haswell`.
 
-[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/44966592339
+[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/45091892043
 <!-- daily results: end -->
 
 ### Every list, 2026-10-04 to 2026-10-07
