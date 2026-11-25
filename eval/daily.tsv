@@ -1,59 +1,58 @@
-# run of 2026-11-24
+# run of 2026-11-25
 kind	package	version	job	cran	verdict
-BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced
-BLIS	ISwR	2.0-12	blis-fedora-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced
-BLIS	ISwR	2.0-12	blis-fedora-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced
-BLIS	ISwR	2.0-12	blis-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	partly reproduced
-BLIS	ISwR	2.0-12	blis-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	not checked
-BLIS	ISwR	2.0-12	blis-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced
+BLIS	ISwR	2.0-12	blis-fedora-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
+BLIS	ISwR	2.0-12	blis-fedora-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
+BLIS	ISwR	2.0-12	blis-fedora-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
+BLIS	ISwR	2.0-12	blis-haswell	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	partly reproduced, all of it also in reference
+BLIS	ISwR	2.0-12	blis-skx	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	partly reproduced, all of it also in reference
+BLIS	ISwR	2.0-12	blis-zen3	tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE	reproduced, part of it also in reference
 BLIS	litterfitter	0.3.0	blis-fedora-haswell	tests testthat.R: ERROR	reproduced
 BLIS	litterfitter	0.3.0	blis-fedora-skx	tests testthat.R: ERROR	reproduced
 BLIS	litterfitter	0.3.0	blis-fedora-zen3	tests testthat.R: ERROR	not reproduced
 BLIS	litterfitter	0.3.0	blis-haswell	tests testthat.R: ERROR	reproduced
-BLIS	litterfitter	0.3.0	blis-skx	tests testthat.R: ERROR	not checked
+BLIS	litterfitter	0.3.0	blis-skx	tests testthat.R: ERROR	reproduced
 BLIS	litterfitter	0.3.0	blis-zen3	tests testthat.R: ERROR	not reproduced
 BLIS	micEconDistRay	0.1-4	blis-fedora-haswell	tests appleProdFr86_test.Rout: NOTE	reproduced
 BLIS	micEconDistRay	0.1-4	blis-fedora-skx	tests appleProdFr86_test.Rout: NOTE	reproduced
 BLIS	micEconDistRay	0.1-4	blis-fedora-zen3	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	micEconDistRay	0.1-4	blis-haswell	tests appleProdFr86_test.Rout: NOTE	not reproduced
-BLIS	micEconDistRay	0.1-4	blis-skx	tests appleProdFr86_test.Rout: NOTE	not checked
+BLIS	micEconDistRay	0.1-4	blis-skx	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	micEconDistRay	0.1-4	blis-zen3	tests appleProdFr86_test.Rout: NOTE	not reproduced
 BLIS	MixStable	0.1.0	blis-fedora-haswell	dependencies in R code: NOTE; tests test_ecf.R: ERROR	partly reproduced, all of it also in reference
 BLIS	MixStable	0.1.0	blis-fedora-skx	dependencies in R code: NOTE; tests test_ecf.R: ERROR	partly reproduced, all of it also in reference
 BLIS	MixStable	0.1.0	blis-fedora-zen3	dependencies in R code: NOTE; tests test_ecf.R: ERROR	partly reproduced, all of it also in reference
 BLIS	MixStable	0.1.0	blis-haswell	dependencies in R code: NOTE; tests test_ecf.R: ERROR	partly reproduced, all of it also in reference
-BLIS	MixStable	0.1.0	blis-skx	dependencies in R code: NOTE; tests test_ecf.R: ERROR	not checked
+BLIS	MixStable	0.1.0	blis-skx	dependencies in R code: NOTE; tests test_ecf.R: ERROR	partly reproduced, all of it also in reference
 BLIS	MixStable	0.1.0	blis-zen3	dependencies in R code: NOTE; tests test_ecf.R: ERROR	partly reproduced, all of it also in reference
 BLIS	netgwas	1.14.5	blis-fedora-haswell	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
-BLIS	netgwas	1.14.5	blis-fedora-skx	R code for possible problems: NOTE; tests testthat.R: ERROR	reproduced, part of it also in reference
+BLIS	netgwas	1.14.5	blis-fedora-skx	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
 BLIS	netgwas	1.14.5	blis-fedora-zen3	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
 BLIS	netgwas	1.14.5	blis-haswell	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
-BLIS	netgwas	1.14.5	blis-skx	R code for possible problems: NOTE; tests testthat.R: ERROR	not checked
+BLIS	netgwas	1.14.5	blis-skx	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
 BLIS	netgwas	1.14.5	blis-zen3	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
 BLIS	nycOpenData	0.2.3	blis-fedora-haswell	re-building of vignette outputs: ERROR	not reproduced
 BLIS	nycOpenData	0.2.3	blis-fedora-skx	re-building of vignette outputs: ERROR	not reproduced
 BLIS	nycOpenData	0.2.3	blis-fedora-zen3	re-building of vignette outputs: ERROR	not reproduced
-BLIS	nycOpenData	0.2.3	blis-haswell	re-building of vignette outputs: ERROR	not reproduced
-BLIS	nycOpenData	0.2.3	blis-skx	re-building of vignette outputs: ERROR	not checked
+BLIS	nycOpenData	0.2.3	blis-haswell	re-building of vignette outputs: ERROR	reproduced, all of it also in reference
+BLIS	nycOpenData	0.2.3	blis-skx	re-building of vignette outputs: ERROR	not reproduced
 BLIS	nycOpenData	0.2.3	blis-zen3	re-building of vignette outputs: ERROR	not reproduced
-BLIS	projpred	3.0.0	blis-fedora-haswell	tests testthat.R: ERROR	different problem
-BLIS	projpred	3.0.0	blis-fedora-skx	tests testthat.R: ERROR	different problem
-BLIS	projpred	3.0.0	blis-fedora-zen3	tests testthat.R: ERROR	different problem
-BLIS	projpred	3.0.0	blis-haswell	tests testthat.R: ERROR	different problem
-BLIS	projpred	3.0.0	blis-skx	tests testthat.R: ERROR	not checked
-BLIS	projpred	3.0.0	blis-zen3	tests testthat.R: ERROR	different problem
+BLIS	projpred	3.0.0	blis-fedora-haswell	tests testthat.R: ERROR	different problem, all of it also in reference
+BLIS	projpred	3.0.0	blis-fedora-skx	tests testthat.R: ERROR	different problem, all of it also in reference
+BLIS	projpred	3.0.0	blis-fedora-zen3	tests testthat.R: ERROR	different problem, all of it also in reference
+BLIS	projpred	3.0.0	blis-haswell	tests testthat.R: ERROR	different problem, all of it also in reference
+BLIS	projpred	3.0.0	blis-skx	tests testthat.R: ERROR	different problem, all of it also in reference
+BLIS	projpred	3.0.0	blis-zen3	tests testthat.R: ERROR	different problem, all of it also in reference
 BLIS	tsDyn	11.0.6	blis-fedora-haswell	tests compare_tsDyn_vars.Rout: NOTE	reproduced
 BLIS	tsDyn	11.0.6	blis-fedora-skx	tests compare_tsDyn_vars.Rout: NOTE	not reproduced
 BLIS	tsDyn	11.0.6	blis-fedora-zen3	tests compare_tsDyn_vars.Rout: NOTE	reproduced
 BLIS	tsDyn	11.0.6	blis-haswell	tests compare_tsDyn_vars.Rout: NOTE	not reproduced
-BLIS	tsDyn	11.0.6	blis-skx	tests compare_tsDyn_vars.Rout: NOTE	not checked
+BLIS	tsDyn	11.0.6	blis-skx	tests compare_tsDyn_vars.Rout: NOTE	not reproduced
 BLIS	tsDyn	11.0.6	blis-zen3	tests compare_tsDyn_vars.Rout: NOTE	not reproduced
-MKL	ackwards	0.3.0	mkl	tests testthat.R: ERROR	not reproduced
+MKL	ackwards	0.3.0	mkl	tests testthat.R: ERROR	check did not finish
 MKL	adas.utils	1.5.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	AIPW	0.6.9.3	mkl	tests testthat.R: ERROR	different problem, all of it also in reference
-MKL	ardlverse	2.1.2	mkl	tests testthat.R: ERROR	check did not finish
+MKL	AIPW	0.6.9.3	mkl	tests testthat.R: ERROR	check did not finish
+MKL	ardlverse	2.1.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	arm	1.15-4	mkl	tests bayesglm-keep-order-terms.R: ERROR	not reproduced
-MKL	asympDiag	0.3.3	mkl	OK	not reproduced
 MKL	bases	0.2.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	betaregscale	3.1.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	betaselectr	0.2.4	mkl	tests testthat.R: ERROR	not reproduced
@@ -61,10 +60,9 @@ MKL	bootImpute	1.3.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	causalMed	0.1.3	mkl	tests testthat.R: ERROR	not reproduced
 MKL	cdid	1.3.0.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	circumplex	2.1.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	climatehealth	1.0.3	mkl	OK	different problem
 MKL	clubSandwich	0.7.0	mkl	R code for possible problems: NOTE; tests testthat.R: ERROR	same step, different result, part of it also in reference
 MKL	clusterIV	0.2.0	mkl	tests test-api.R: ERROR	not reproduced
-MKL	cpr	0.4.1	mkl	tests test-predict.R: ERROR	not reproduced
+MKL	cpr	0.4.1	mkl	tests test-predict.R: ERROR	check did not finish
 MKL	dacc	0.1.0	mkl	tests dispatch.R: ERROR; tests latent.R: ERROR	not reproduced
 MKL	datawizard	1.5.0	mkl	tests testthat.R: ERROR	check did not finish
 MKL	devRate	0.2.6	mkl	re-building of vignette outputs: ERROR	not reproduced
@@ -73,32 +71,28 @@ MKL	disaggR	1.0.5.4	mkl	tests testthat.R: ERROR	not reproduced
 MKL	drlate	0.3.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	drmTMB	0.7.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	dynamac	0.1.12	mkl	tests testthat.R: ERROR	not reproduced
-MKL	eDMA	1.5-5	mkl	OK	not reproduced
 MKL	fastphylosig	0.3.5	mkl	tests testthat.R: ERROR	not reproduced
 MKL	fbardl	1.2.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	FCUSUM	1.1.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	FDboost	1.1-4	mkl	OK	different problem
 MKL	ffmanova	1.1.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	fgls	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	fixest	0.14.2	mkl	tests fixest_tests.R: ERROR	not reproduced
-MKL	fMRItools	0.9.2	mkl	tests testthat.R: ERROR	check did not finish
-MKL	forecast	9.0.2	mkl	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
+MKL	fixest	0.14.2	mkl	tests fixest_tests.R: ERROR	check did not finish
+MKL	fMRItools	0.9.2	mkl	tests testthat.R: ERROR	not reproduced
+MKL	forecast	9.0.2	mkl	R code for possible problems: NOTE; tests testthat.R: ERROR	check did not finish
 MKL	fpc	2.2-15	mkl	for differences from example reference output: NOTE	partly reproduced, part of it also in reference
 MKL	GauPro	0.2.17	mkl	tests testthat.R: ERROR	not reproduced
 MKL	gaussianprocesses	1.0.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	genefindr	1.1.0	mkl	OK	not reproduced
 MKL	GeoModels	2.3.0	mkl	examples: ERROR	reproduced
-MKL	germinationmetrics	0.1.10	mkl	OK	not reproduced
 MKL	gets	0.40	mkl	tests testthat.R: ERROR	not reproduced
 MKL	ggfacto	0.4.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	ggplot2	4.0.4	mkl	tests testthat.R: ERROR	not reproduced
 MKL	gips	1.3.1	mkl	tests testthat.R: ERROR	reproduced
 MKL	gllvmTMB	0.7.1	mkl	tests testthat.R: ERROR	not reproduced
-MKL	grplasso	0.4-7	mkl	R code for possible problems: NOTE; tests test_centerscaling.R: ERROR	partly reproduced
+MKL	grplasso	0.4-7	mkl	R code for possible problems: NOTE; tests test_centerscaling.R: ERROR	partly reproduced, all of it also in reference
 MKL	gsDesignNB	0.4.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	hcinfer	0.3.0	mkl	tests testthat.R: ERROR	check did not finish
 MKL	hdrm	1.0.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	irtsim	0.2.0	mkl	tests testthat.R: ERROR	not reproduced
+MKL	irtsim	0.2.0	mkl	tests testthat.R: ERROR	check did not finish
 MKL	IsingSampler	0.5.0	mkl	tests test-estimators.R: ERROR	not reproduced
 MKL	ivgets	0.1.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	ivreg2r	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
@@ -109,91 +103,88 @@ MKL	kvkapiR	0.1.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	lcc	3.2.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	lingamr	0.1.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	list	9.2.6	mkl	tests testthat.R: ERROR	not reproduced
-MKL	lmeInfo	0.3.4	mkl	OK	not reproduced
 MKL	lmmresample	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	lmtp	1.5.4	mkl	tests testthat.R: ERROR	check did not finish
 MKL	logbin	2.0.6	mkl	tests testthat.R: ERROR	not reproduced
-MKL	manymome	0.3.8	mkl	tests testthat.R: ERROR	not reproduced
-MKL	mashr	0.2.79	mkl	dependencies in R code: NOTE; tests testthat.R: ERROR	partly reproduced
+MKL	manymome	0.3.8	mkl	tests testthat.R: ERROR	check did not finish
+MKL	mashr	0.2.79	mkl	dependencies in R code: NOTE; tests testthat.R: ERROR	not reproduced
 MKL	Matrix	1.7-6	mkl	tests spModel.matrix.R: ERROR	not reproduced
 MKL	mboost	2.9-14	mkl	tests bugfixes.Rout: NOTE; tests regtest-baselearner.Rout: NOTE; tests regtest-gamboost.Rout: NOTE	reproduced, all of it also in reference
 MKL	metafrontier	0.4.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	MetaHD	0.1.6	mkl	tests testthat.R: ERROR	not reproduced
+MKL	MFF	1.0.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	MFPCA	1.3-11	mkl	tests testthat.R: ERROR	not reproduced
-MKL	mfrmr	0.2.4	mkl	tests testthat.R: ERROR	not reproduced
 MKL	mice	3.19.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	miLAG	1.0.5	mkl	tests testthat.R: ERROR	not reproduced
 MKL	mixvlmc	0.2.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	mkin	1.2.10	mkl	tests testthat.R: ERROR	not reproduced
-MKL	mlr3learners	0.16.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	mlrCPO	0.3.8	mkl	tests run-cpo.R: ERROR	check did not finish
-MKL	mmibain	0.2.0	mkl	OK	different problem, all of it also in reference
-MKL	MortalityLaws	3.0.0	mkl	tests testthat.R: ERROR	not reproduced
+MKL	mlr3learners	0.16.0	mkl	tests testthat.R: ERROR	check did not finish
+MKL	mlrCPO	0.3.8	mkl	tests run-cpo.R: ERROR	different problem, all of it also in reference
+MKL	MortalityLaws	3.0.0	mkl	tests testthat.R: ERROR	check did not finish
 MKL	MRStdCRT	0.1.3	mkl	re-building of vignette outputs: ERROR; tests estimand-specific.R: ERROR	not reproduced
 MKL	multipleITScontrol	0.1.0	mkl	re-building of vignette outputs: ERROR	not reproduced
 MKL	multipleOutcomes	0.18.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	mvardlurt	1.1.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	mverse	0.2.3	mkl	OK	not reproduced
 MKL	netgwas	1.14.5	mkl	R code for possible problems: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
 MKL	netmatchRI	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	nlme	3.1-172	mkl	tests predict.lme.R: ERROR	not reproduced
-MKL	nonprobsvy	0.3.0	mkl	OK	not reproduced
 MKL	oalasso	1.0.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	offsetreg	1.2.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	olsrr	0.7.1	mkl	tests testthat.R: ERROR	not reproduced
+MKL	ordered	0.2.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	panglm	1.7.0	mkl	tests testthat.R: ERROR	check did not finish
-MKL	parameters	0.30.0	mkl	OK	not reproduced
 MKL	pdi	0.4.3	mkl	tests testthat.R: ERROR	not reproduced
-MKL	phylopred	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	pigauto	0.11.1	mkl	OK	not reproduced
-MKL	pkgdiff	1.0.5	mkl	OK	not reproduced
+MKL	phylopred	0.1.0	mkl	tests testthat.R: ERROR	check did not finish
 MKL	power4mome	0.2.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	probably	1.2.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	projpred	3.0.0	mkl	OK	different problem
+MKL	progressify	0.5.0	mkl	tests test-progressify-car.R: ERROR	not reproduced
 MKL	Proximum	1.1.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	proxymix	0.17.0	mkl	OK	not reproduced
 MKL	psychonetrics	0.17.8	mkl	tests tinytest.R: ERROR	not reproduced
 MKL	rBiasCorrection	0.3.6	mkl	tests testthat.R: ERROR	not reproduced
 MKL	RCTCovAdj	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	rdlocrand	3.0	mkl	OK	not reproduced
-MKL	recipes	1.4.0	mkl	tests testthat.R: ERROR	check did not finish
+MKL	recipes	1.4.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	reintervals	0.2.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	rigr	1.0.10	mkl	OK	not reproduced
 MKL	riskdiff	0.3.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	robustbase	0.99-7	mkl	tests nlrob-tst.R: ERROR	not reproduced
+MKL	RMTIF	0.3.1	mkl	tests test-console.R: ERROR	not reproduced
+MKL	robustbase	0.99-7	mkl	tests nlrob-tst.R: ERROR	check did not finish
+MKL	rok	0.2.0	mkl	tests masking.R: ERROR	not reproduced
+MKL	rray	0.2.0	mkl	tests testthat.R: ERROR	check did not finish
+MKL	rstpm2	1.7.1	mkl	tests testthat.R: ERROR	not reproduced
+MKL	rsvd	2.0.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	sampleSelection	1.2-16	mkl	tests selection.Rout: NOTE	not reproduced
 MKL	scan	0.68.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	scdhlm	0.8.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	scorecraft	0.3.2	mkl	tests testthat.R: ERROR	not reproduced
-MKL	semanticfa	0.5.1	mkl	OK	not reproduced
+MKL	scpi	4.0.1	mkl	tests testthat.R: ERROR	different problem
+MKL	semfindr	0.2.1	mkl	tests testthat.R: ERROR	same step, different result
 MKL	seminrExtras	1.0.4	mkl	tests testthat.R: ERROR	not reproduced
 MKL	semTests	2.0.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	sfa	1.2.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	simhelpers	0.3.2	mkl	tests testthat.R: ERROR	not reproduced
+MKL	simhelpers	0.3.2	mkl	tests testthat.R: ERROR	check did not finish
 MKL	simulab	0.4.10	mkl	tests testthat.R: ERROR	not reproduced
 MKL	spCF	0.2.2.1	mkl	tests testthat.R: ERROR	check did not finish
-MKL	specr	1.1.0	mkl	tests testthat.R: ERROR	check did not finish
-MKL	stochvol	3.2.9	mkl	OK	not reproduced
-MKL	SuperLearner	2.0-42	mkl	OK	not reproduced
+MKL	speccurvieR	1.0.0	mkl	tests testthat.R: ERROR	not reproduced
+MKL	specr	1.1.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	SVEMnet	4.0.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	tabxplor	2.0.1	mkl	tests testthat.R: ERROR	not reproduced
 MKL	targeted	0.9.0	mkl	tests tinytest.R: ERROR	not reproduced
 MKL	tern	0.9.13	mkl	tests testthat.R: ERROR	not reproduced
 MKL	tf	0.5.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	tidymatrix	0.1.0	mkl	OK	not reproduced
+MKL	tidysynthesis	0.1.3	mkl	tests testthat.R: ERROR	different problem, all of it also in reference
 MKL	tppcm	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	trending	0.1.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	tsissm	1.0.4	mkl	tests testthat.R: ERROR	not reproduced
+MKL	twdtw	1.1-0	mkl	tests testthat.R: ERROR	check did not finish
 MKL	uniml	0.5.1	mkl	re-building of vignette outputs: ERROR; tests testthat.R: ERROR	not reproduced
-MKL	vasicekreg	1.3.0	mkl	tests testthat.R: ERROR	not reproduced
-MKL	vennabers	1.0.0	mkl	tests testthat.R: ERROR	check did not finish
-MKL	voi	1.0.3	mkl	OK	check did not finish
+MKL	vasicekreg	1.3.0	mkl	tests testthat.R: ERROR	check did not finish
+MKL	VCMoE	0.3.0	mkl	tests testthat.R: ERROR	not reproduced
+MKL	vennabers	1.0.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	WALS	0.2.6	mkl	tests testthat.R: ERROR	not reproduced
 MKL	wdsmatch	0.2.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	whatifbandit	1.0.3	mkl	tests testthat.R: ERROR	not reproduced
 MKL	wildmeta	0.3.2	mkl	tests testthat.R: ERROR	not reproduced
 MKL	workflows	1.3.0	mkl	tests testthat.R: ERROR	not reproduced
+MKL	xplainfi	1.2.0	mkl	tests testthat.R: ERROR	not reproduced
 MKL	zfit	0.4.0	mkl	DESCRIPTION meta-information: NOTE; tests testthat.R: ERROR	partly reproduced, all of it also in reference
-OpenBLAS	mfrmr	0.2.4	openblas	tests testthat.R: ERROR	reproduced
 OpenBLAS	ordered	0.2.1	openblas	tests testthat.R: ERROR	reproduced
 OpenBLAS	warbleR	1.1.38	openblas	re-building of vignette outputs: ERROR	not reproduced
