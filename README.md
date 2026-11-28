@@ -210,33 +210,30 @@ at CRAN on a web request shows as not reproduced when the request works here.
 <!-- daily results, rewritten by the evaluate workflow: start -->
 Every day the publish workflow rebuilds the arms, and the evaluate workflow
 repeats this comparison in the new images for CRAN's OpenBLAS, MKL, BLIS and
-clang23 lists and rewrites this section. The [run of 2026-11-27][daily-run]
-used R-devel r90998 on Debian testing, the CRAN snapshot of 2026-11-26 and
-CRAN's lists as of 2026-11-27 02:53 GMT.
+clang23 lists and rewrites this section. The [run of 2026-11-28][daily-run]
+used R-devel r91004 on Debian testing, the CRAN snapshot of 2026-11-27 and
+CRAN's lists as of 2026-11-28 01:54 GMT.
 
 | CRAN's list | Package | CRAN's result | Result here |
 |---|---|---|---|
 | OpenBLAS | `ordered` 0.2.1 | tests testthat.R: ERROR | reproduced |
 | OpenBLAS | `warbleR` 1.1.38 | re-building of vignette outputs: ERROR | not reproduced |
-| MKL | 137 packages | | 3 reproduced, 2 same step, different result, 7 partly reproduced, 5 different problem, 112 not reproduced, 8 check did not finish |
+| MKL | 134 packages | | 3 reproduced, 1 same step, different result, 4 partly reproduced, 5 different problem, 111 not reproduced, 10 check did not finish |
 | BLIS | `ISwR` 2.0-12 | tests allexercises.Rout: NOTE; tests allscripts.Rout: NOTE | reproduced, part of it also in reference (`blis-fedora-haswell`, `blis-fedora-skx`, `blis-fedora-zen3`, `blis-zen3`)<br>partly reproduced, all of it also in reference (`blis-haswell`) |
 | BLIS | `micEconDistRay` 0.1-4 | tests appleProdFr86_test.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-skx`)<br>not reproduced (`blis-fedora-zen3`, `blis-haswell`, `blis-zen3`) |
 | BLIS | `MixStable` 0.1.0 | dependencies in R code: NOTE; tests test_ecf.R: ERROR | partly reproduced, all of it also in reference |
-| BLIS | `netgwas` 1.14.5 | R code for possible problems: NOTE; tests testthat.R: ERROR | partly reproduced, all of it also in reference |
+| BLIS | `netgwas` 1.14.5 | R code for possible problems: NOTE; tests testthat.R: ERROR | partly reproduced |
 | BLIS | `nycOpenData` 0.2.3 | re-building of vignette outputs: ERROR | not reproduced |
 | BLIS | `projpred` 3.0.0 | tests testthat.R: ERROR | different problem, all of it also in reference |
 | BLIS | `tsDyn` 11.0.6 | tests compare_tsDyn_vars.Rout: NOTE | reproduced (`blis-fedora-haswell`, `blis-fedora-zen3`)<br>not reproduced (`blis-fedora-skx`, `blis-haswell`, `blis-zen3`) |
 | clang23 | none listed | | |
 
-The MKL checks ran on an Intel Xeon 6975P-C, except `ackwards`, `arm`,
-`clubSandwich`, `dacc`, `disaggR`, `ffmanova`, `fMRItools`,
-`gaussianprocesses`, `grplasso`, `hdrm`, `ivreg2r`, `list`, `logbin`,
-`mboost`, `mixvlmc`, `mlrCPO`, `multipleOutcomes`, `olsrr`, `pdi`,
-`progressify`, `riskdiff`, `rok`, `sampleSelection`, `semTests`, `simulab`,
-`SVEMnet`, `trending`, `uniml` and `WALS` on an AMD EPYC 7763 and `AIPW`,
-`devRate`, `fpc`, `IsingSampler`, `mashr`, `MRStdCRT`, `power4mome`, `rstpm2`,
-`speccurvieR` and `VCMoE` on an AMD EPYC 9V45. MKL runs its AVX2 and AVX-512
-code only on Intel CPUs, so an MKL result can change with the runner.
+The MKL checks ran on an Intel Xeon 6975P-C, except `betaregscale`, `dynamac`,
+`ggfacto`, `koma`, `MFF`, `oalasso`, `recipes`, `semfindr`, `tidysynthesis`
+and `xplainfi` on an AMD EPYC 9V45 and `bases`, `drmTMB`, `gets`, `kappalab`,
+`MetaHD`, `nlme`, `RCTCovAdj`, `scpi`, `tf` and `workflows` on an INTEL XEON
+PLATINUM 8573C. MKL runs its AVX2 and AVX-512 code only on Intel CPUs, so an
+MKL result can change with the runner.
 
 A BLIS entry is checked once for each BLIS build and kernel set. `blis-zen3`
 is Debian's BLIS with the zen3 kernels, and `blis-fedora-haswell` is Fedora's
@@ -244,24 +241,32 @@ BLIS and LAPACK, as at CRAN, with the haswell kernels.
 
 No results came from `blis-skx` this time.
 
-These entries changed since the run of 2026-11-26.
+These entries changed since the run of 2026-11-27.
 
-- `netgwas` on the BLIS list went from "partly reproduced" to "partly
-  reproduced, all of it also in reference" in `blis-fedora-haswell`,
+- `netgwas` on the BLIS list went from "partly reproduced, all of it also in
+  reference" to "partly reproduced" in `blis-fedora-haswell`,
   `blis-fedora-skx`, `blis-fedora-zen3`, `blis-haswell` and `blis-zen3`.
-- `nycOpenData` on the BLIS list went from "reproduced" to "not reproduced" in
-  `blis-fedora-zen3` and `blis-zen3`.
-- `fpc` on the MKL list went from "partly reproduced, part of it also in
+- `clubSandwich` on the MKL list went from "partly reproduced, all of it also
+  in reference" to "same step, different result, part of it also in
+  reference".
+- `fpc` on the MKL list went from "reproduced, all of it also in reference" to
+  "partly reproduced, part of it also in reference".
+- `mashr` on the MKL list went from "partly reproduced" to "not reproduced".
+- `mboost` on the MKL list went from "partly reproduced, all of it also in
   reference" to "reproduced, all of it also in reference".
-- `mashr` on the MKL list went from "not reproduced" to "partly reproduced".
-- `MRStdCRT` on the MKL list went from "not reproduced" to "partly reproduced,
-  all of it also in reference".
-- `netgwas` on the MKL list went from "partly reproduced" to "partly
-  reproduced, all of it also in reference".
-- `rstpm2` on the MKL list went from "not reproduced" to "same step, different
-  result".
+- `mlrCPO` on the MKL list went from "different problem, all of it also in
+  reference" to "different problem".
+- `netgwas` on the MKL list went from "partly reproduced, all of it also in
+  reference" to "partly reproduced".
+- `rstpm2` on the MKL list went from "same step, different result" to "not
+  reproduced".
+- `semfindr` on the MKL list went from "same step, different result" to "not
+  reproduced".
+- `causalMed` left the MKL list.
+- `mixvlmc` left the MKL list.
+- `MRStdCRT` left the MKL list.
 
-[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/45932419675
+[daily-run]: https://github.com/coatless/docker-r-check/actions/runs/46099040788
 <!-- daily results: end -->
 
 ### Every list, 2026-10-04 to 2026-10-07
